@@ -19,8 +19,12 @@ export default function Page() {
   const [state, setState] = useState<AgentState>("listening");
   const [colors, setColors] = useState<number[]>([DEFAULT_HUE]); // 1-3 hues
   const [theme, setTheme] = useState<Theme>("light");
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
+  // Once the user flips the toggle, stop following the OS so their choice sticks.
+  const userOverrodeTheme = useRef(false);
 
   // Track viewport so controls sit below the phone on desktop, in a bottom
   // sheet on mobile. (Starts false so server + first client render match.)
@@ -32,32 +36,51 @@ export default function Page() {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
+  // Follow the OS colour scheme on load AND keep in sync when it changes live
+  // (e.g. iOS auto day/night), until the user manually overrides via the toggle.
   useEffect(() => {
-    if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      setTheme("dark");
-    }
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    setTheme(mq.matches ? "dark" : "light");
+    const onChange = (e: MediaQueryListEvent) => {
+      if (!userOverrodeTheme.current) setTheme(e.matches ? "dark" : "light");
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Swipe shortcut (mobile): swipe down opens the settings sheet, up closes it.
-  const touchStartY = useRef<number | null>(null);
-  const onTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0]?.clientY ?? null;
+  // Mobile: the settings sheet is driven by a real scroll gesture — touch-based
+  // swipe detection is unreliable on mobile web. The page scrolls inside an
+  // invisible host with two snap stops: closed (top) and open (bottom). Scroll
+  // progress 0..1 lifts the sheet while the app behind it scales down and dims.
+  const applyProgress = () => {
+    const host = hostRef.current;
+    if (!host) return;
+    const range = host.scrollHeight - host.clientHeight;
+    const p = range > 0 ? Math.min(1, Math.max(0, host.scrollTop / range)) : 0;
+    host.style.setProperty("--p", p.toFixed(4));
+    const open = p > 0.5;
+    setSheetOpen((prev) => (prev === open ? prev : open));
   };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    const start = touchStartY.current;
-    touchStartY.current = null;
-    if (!isMobile || start == null) return;
-    const dy = (e.changedTouches[0]?.clientY ?? start) - start;
-    if (dy > 60 && !menuOpen) setMenuOpen(true);
-    else if (dy < -60 && menuOpen) setMenuOpen(false);
+  const onHostScroll = () => {
+    if (rafRef.current != null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      applyProgress();
+    });
   };
+  const openSheet = () =>
+    hostRef.current?.scrollTo({ top: hostRef.current.clientHeight, behavior: "smooth" });
+  const closeSheet = () =>
+    hostRef.current?.scrollTo({ top: 0, behavior: "smooth" });
 
-  const toggleTheme = () =>
+  const toggleTheme = () => {
+    userOverrodeTheme.current = true;
     setTheme((t) => (t === "light" ? "dark" : "light"));
+  };
   const setColorAt = (i: number, hue: number) =>
     setColors((c) => c.map((h, idx) => (idx === i ? hue : h)));
   const addColor = () =>
@@ -107,57 +130,70 @@ export default function Page() {
   };
 
   return (
-    <main className={styles.stage} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      {/* Desktop: theme toggle lives at the top-right of the page. */}
+    <main className={styles.stage}>
+      {/* Desktop: theme toggle top-right, phone centered, controls below. */}
       {!isMobile && (
-        <button
-          className={styles.themeToggle}
-          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          onClick={toggleTheme}
-        >
-          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
-      )}
-
-      <Phone
-        viz={viz}
-        hues={colors}
-        state={state}
-        dark={theme === "dark"}
-        showMenu={isMobile}
-        onMenu={() => setMenuOpen(true)}
-        onToggleTheme={toggleTheme}
-      />
-
-      {/* Desktop: controls sit below the phone. */}
-      {!isMobile && (
-        <div className={styles.controls}>
-          <Controls {...controlsProps} />
-        </div>
-      )}
-
-      {/* Mobile: controls live in an iOS-style bottom sheet. */}
-      {isMobile && (
-        <div
-          className={`${styles.sheet} ${menuOpen ? styles.sheetOpen : ""}`}
-          role="dialog"
-          aria-label="Settings"
-          aria-hidden={!menuOpen}
-        >
+        <>
           <button
-            className={styles.sheetScrim}
-            aria-label="Close settings"
-            tabIndex={menuOpen ? 0 : -1}
-            onClick={() => setMenuOpen(false)}
+            className={styles.themeToggle}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            onClick={toggleTheme}
+          >
+            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+
+          <Phone
+            viz={viz}
+            hues={colors}
+            state={state}
+            dark={theme === "dark"}
+            showMenu={false}
+            onMenu={() => {}}
+            onToggleTheme={toggleTheme}
           />
-          <div className={styles.sheetPanel}>
+
+          <div className={styles.controls}>
+            <Controls {...controlsProps} />
+          </div>
+        </>
+      )}
+
+      {/* Mobile: scroll down to reveal the settings sheet (app scales + dims
+          behind it); scroll up to dismiss. Snap stops settle open/closed. */}
+      {isMobile && (
+        <div className={styles.scrollHost} ref={hostRef} onScroll={onHostScroll}>
+          <div className={styles.phoneLayer}>
+            <Phone
+              viz={viz}
+              hues={colors}
+              state={state}
+              dark={theme === "dark"}
+              showMenu
+              onMenu={openSheet}
+              onToggleTheme={toggleTheme}
+            />
+          </div>
+
+          <button
+            className={`${styles.phoneDim} ${sheetOpen ? styles.phoneDimActive : ""}`}
+            aria-label="Close settings"
+            tabIndex={sheetOpen ? 0 : -1}
+            onClick={closeSheet}
+          />
+
+          <div
+            className={`${styles.sheet2} ${sheetOpen ? styles.sheet2Open : ""}`}
+            role="dialog"
+            aria-label="Settings"
+            aria-hidden={!sheetOpen}
+          >
             <div className={styles.sheetHead}>
               <span className={styles.sheetTitle}>Settings</span>
               <button
                 className={styles.sheetClose}
                 aria-label="Close"
-                tabIndex={menuOpen ? 0 : -1}
-                onClick={() => setMenuOpen(false)}
+                tabIndex={sheetOpen ? 0 : -1}
+                onClick={closeSheet}
               >
                 <X size={18} weight="bold" />
               </button>
@@ -166,6 +202,10 @@ export default function Page() {
               <Controls {...controlsProps} />
             </div>
           </div>
+
+          {/* Invisible scroll length: two snap stops (closed / open). */}
+          <div className={styles.snap} />
+          <div className={styles.snap} />
         </div>
       )}
     </main>

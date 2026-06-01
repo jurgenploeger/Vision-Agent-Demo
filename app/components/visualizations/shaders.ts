@@ -200,14 +200,17 @@ void main() {
   // Keep the bounce boundary modest so the (large) blobs always overlap into a
   // single connected shape — they shift/bounce but never separate with a gap.
   float edge = 0.5;
-  float reach = 1.0; // constant — bouncing comes from the wander, not the state
-  float bt = t * 0.9; // self-driven drift clock, decoupled from state speed
-  vec2 d0 = reach * vec2(snoise(vec3(bt * 0.16, 0.0, 1.0)),
-                         snoise(vec3(bt * 0.16, 1.0, 0.0)));
-  vec2 d1 = reach * vec2(snoise(vec3(bt * 0.12, 9.0, 0.0)),
-                         snoise(vec3(bt * 0.12, 0.0, 9.0)));
-  vec2 d2 = reach * vec2(snoise(vec3(bt * 0.09, 5.0, 2.0)),
-                         snoise(vec3(bt * 0.09, 2.0, 5.0)));
+  // Larger reach => the radius folds against the edge far more often, so the
+  // blobs ricochet around the orb energetically (bouncier) while edge=0.5 keeps
+  // the centres bounded — they still overlap into one connected shape.
+  float reach = 1.7;
+  float bt = t * 1.2; // self-driven drift clock — a touch faster for liveliness
+  vec2 d0 = reach * vec2(snoise(vec3(bt * 0.22, 0.0, 1.0)),
+                         snoise(vec3(bt * 0.22, 1.0, 0.0)));
+  vec2 d1 = reach * vec2(snoise(vec3(bt * 0.17, 9.0, 0.0)),
+                         snoise(vec3(bt * 0.17, 0.0, 9.0)));
+  vec2 d2 = reach * vec2(snoise(vec3(bt * 0.13, 5.0, 2.0)),
+                         snoise(vec3(bt * 0.13, 2.0, 5.0)));
   vec2 c0 = pingpong(length(d0), edge) * normalize(d0 + vec2(1e-3, 0.0));
   vec2 c1 = pingpong(length(d1), edge) * normalize(d1 + vec2(1e-3, 0.0));
   vec2 c2 = pingpong(length(d2), edge) * normalize(d2 + vec2(1e-3, 0.0));

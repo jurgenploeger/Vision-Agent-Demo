@@ -1,5 +1,7 @@
 .phone {
-  height: min(720px, calc(100dvh - 360px));
+  /* Floor keeps the device (and its centered visual) usable on short
+     viewports; the page scrolls instead of the phone collapsing. */
+  height: clamp(460px, calc(100dvh - 360px), 720px);
   aspect-ratio: 390 / 844;
   border-radius: 52px;
   background: var(--device-bg);
@@ -142,14 +144,13 @@
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  display: grid;
-  place-items: center;
 }
 
+/* Layers fill the slot via absolute insets (not height:100%) so the canvas
+   can't drive its own parent's height and overflow the slot. */
 .vizLayer {
-  grid-area: 1 / 1;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   opacity: 0;
   transition: opacity 0.3s ease;
   pointer-events: none;
