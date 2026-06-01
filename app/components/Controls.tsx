@@ -110,8 +110,8 @@ export default function Controls({
             className={styles.segThumb}
             aria-hidden
             style={{
-              width: `calc((100% - 8px - ${TABS.length - 1} * 4px) / ${TABS.length})`,
-              transform: `translateX(calc(${TABS.findIndex((t) => t.id === viz)} * (100% + 4px)))`,
+              width: `calc((100% - 8px - ${TABS.length - 1} * 2px) / ${TABS.length})`,
+              transform: `translateX(calc(${TABS.findIndex((t) => t.id === viz)} * (100% + 2px)))`,
             }}
           />
           {TABS.map((tab) => (
@@ -136,8 +136,8 @@ export default function Controls({
             className={styles.segThumb}
             aria-hidden
             style={{
-              width: `calc((100% - 8px - ${STATE_ORDER.length - 1} * 4px) / ${STATE_ORDER.length})`,
-              transform: `translateX(calc(${STATE_ORDER.indexOf(state)} * (100% + 4px)))`,
+              width: `calc((100% - 8px - ${STATE_ORDER.length - 1} * 2px) / ${STATE_ORDER.length})`,
+              transform: `translateX(calc(${STATE_ORDER.indexOf(state)} * (100% + 2px)))`,
             }}
           />
           {STATE_ORDER.map((s) => (
@@ -157,41 +157,45 @@ export default function Controls({
       {/* Colors: up to three, each a hue slider + hex field. */}
       <div className={styles.control}>
         <span className={styles.controlLabel}>Color</span>
-        {colors.map((h, i) => (
-          <div key={i} className={styles.colorRow}>
-            <input
-              className={`${styles.slider} ${styles.hueTrack}`}
-              type="range"
-              min={0}
-              max={360}
-              value={h}
-              onChange={(e) => setColorAt(i, Number(e.target.value))}
-              aria-label={`Color ${i + 1} hue`}
-            />
-            <input
-              className={styles.hexInput}
-              type="text"
-              spellCheck={false}
-              value={hexText[i] ?? ""}
-              aria-label={`Color ${i + 1} hex`}
-              onChange={(e) => {
-                const v = e.target.value;
-                setHexText((t) => t.map((x, idx) => (idx === i ? v : x)));
-                const hue = hexToHue(v);
-                if (hue !== null) setColorAt(i, Math.round(hue));
-              }}
-            />
-            {colors.length > 1 && (
-              <button
-                className={styles.colorRemove}
-                aria-label={`Remove color ${i + 1}`}
-                onClick={() => removeColor(i)}
-              >
-                <X size={14} weight="bold" />
-              </button>
-            )}
-          </div>
-        ))}
+        <div className={styles.colorRows}>
+          {colors.map((h, i) => (
+            <div key={i} className={styles.colorRow}>
+              <div className={styles.colorRowInner}>
+                <input
+                  className={`${styles.slider} ${styles.hueTrack}`}
+                  type="range"
+                  min={0}
+                  max={360}
+                  value={h}
+                  onChange={(e) => setColorAt(i, Number(e.target.value))}
+                  aria-label={`Color ${i + 1} hue`}
+                />
+                <input
+                  className={styles.hexInput}
+                  type="text"
+                  spellCheck={false}
+                  value={hexText[i] ?? ""}
+                  aria-label={`Color ${i + 1} hex`}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setHexText((t) => t.map((x, idx) => (idx === i ? v : x)));
+                    const hue = hexToHue(v);
+                    if (hue !== null) setColorAt(i, Math.round(hue));
+                  }}
+                />
+                {colors.length > 1 && (
+                  <button
+                    className={styles.colorRemove}
+                    aria-label={`Remove color ${i + 1}`}
+                    onClick={() => removeColor(i)}
+                  >
+                    <X size={14} weight="bold" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
 
         <div className={styles.colorActions}>
           {colors.length < 3 && (

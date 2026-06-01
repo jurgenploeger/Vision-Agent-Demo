@@ -74,7 +74,7 @@
   max-height: 88%;
   display: flex;
   flex-direction: column;
-  padding: 8px 20px max(20px, env(safe-area-inset-bottom));
+  padding: 20px 20px max(20px, env(safe-area-inset-bottom));
   background: var(--device-bg);
   border-radius: 22px 22px 0 0;
   box-shadow: 0 -12px 40px -12px rgba(0, 0, 0, 0.4);
@@ -90,15 +90,6 @@
 }
 .sheetOpen .sheetPanel {
   transform: translateY(0);
-}
-
-.sheetGrabber {
-  width: 38px;
-  height: 5px;
-  margin: 2px auto 8px;
-  border-radius: 999px;
-  background: var(--muted);
-  opacity: 0.5;
 }
 
 .sheetHead {
@@ -182,11 +173,48 @@
   );
 }
 
-/* A colour row: hue slider + hex field + optional remove button. */
+/* Colour rows live in a gap-less column so a collapsed (0-height) row takes up
+   no space — inter-row spacing comes from each row's own padding, which lives
+   inside the collapsing area and so animates away with it. */
+.colorRows {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Each row expands its height from 0 on insert (grid 0fr -> 1fr), so adding a
+   colour grows the bottom-anchored sheet up smoothly instead of jumping. */
 .colorRow {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: colorRowIn 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes colorRowIn {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .colorRow {
+    animation: none;
+  }
+}
+
+/* The animating grid child must clip + allow 0 height for the fold to work.
+   Bottom padding (inside the clip) is the gap between rows. */
+.colorRowInner {
+  overflow: hidden;
+  min-height: 0;
   display: flex;
   align-items: center;
   gap: 10px;
+  padding-bottom: 10px;
 }
 
 .hexInput {
@@ -279,7 +307,7 @@
 .segFull {
   position: relative;
   display: flex;
-  gap: 4px; /* breathing room so hover backgrounds don't sit flush */
+  gap: 2px; /* breathing room so hover backgrounds don't sit flush */
   width: 100%;
   padding: 4px;
   border-radius: 999px;

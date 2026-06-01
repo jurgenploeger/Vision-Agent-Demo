@@ -66,6 +66,13 @@ vec2 rot2(vec2 p, float a) {
   return mat2(c, -s, s, c) * p;
 }
 
+// One-sided triangle ping-pong: folds x (>=0) into [0, b], reflecting at b —
+// used to make blob centres bounce back when they reach the orb's edge.
+float pingpong(float x, float b) {
+  float m = mod(x, 2.0 * b);
+  return b - abs(m - b);
+}
+
 // Vivid, white-background-tuned color from a single hue (degrees). Saturation
 // and value are fixed (the slider only moves hue); the yellow-green band
 // (~45-180) is tamed because high S/V there reads acidic on white.
@@ -162,7 +169,7 @@ void main() {
   float speechN = snoise(vec3(t * 3.0, 11.0, 3.0)) * 0.62
                 + snoise(vec3(t * 1.3, 7.0, 9.0)) * 0.38; // -1 .. 1
   float talk = uReact * speechN;
-  float R = 0.27 * (1.0 + talk * 0.09);
+  float R = 0.24 * (1.0 + talk * 0.09);
   float speech = uReact * (0.5 + 0.5 * speechN); // 0 .. ~1 while speaking
   float aa = 1.6 / min(uResolution.x, uResolution.y);
   float circle = 1.0 - smoothstep(R - aa, R + aa, r);
@@ -183,22 +190,32 @@ void main() {
   vec2 sp = p + nAmp * vec2(snoise(vec3(p * 0.6, nt)),
                             snoise(vec3(p * 0.6 + 4.7, nt)));
 
-  // --- 2-3 big, soft color clouds. Centres are NOISE-driven (not sines) so
-  // they wander organically and never trace the same looping path — even at
-  // the fast speaking speed. ---
-  // Clouds also swing wider on speech peaks, matching the size pulse.
-  float amp = (1.0 + 0.5 * uReact) * (1.0 + 0.35 * speech);
-  vec2 c0 = 0.30 * amp * vec2(snoise(vec3(t * 0.16 * spd, 0.0, 1.0)),
-                              snoise(vec3(t * 0.16 * spd, 1.0, 0.0)));
-  vec2 c1 = 0.34 * amp * vec2(snoise(vec3(t * 0.12 * spd, 9.0, 0.0)),
-                              snoise(vec3(t * 0.12 * spd, 0.0, 9.0)));
-  vec2 c2 = 0.26 * amp * vec2(snoise(vec3(t * 0.09 * spd, 5.0, 2.0)),
-                              snoise(vec3(t * 0.09 * spd, 2.0, 5.0)));
+  // --- 2-3 big, soft colour clouds. Each centre's DISTANCE from the middle
+  // ping-pongs (bounces) off the orb's edge while its direction wanders from
+  // noise — so the blobs ricochet around inside the circle, never looping. ---
+  // The blobs drift at their OWN steady pace (constant rate + constant reach),
+  // independent of the conversational state: the speaking animation drives the
+  // mesh warp above, not this travel — so the clouds keep bouncing the edges on
+  // their own whether the agent is idle or speaking.
+  // Keep the bounce boundary modest so the (large) blobs always overlap into a
+  // single connected shape — they shift/bounce but never separate with a gap.
+  float edge = 0.5;
+  float reach = 1.0; // constant — bouncing comes from the wander, not the state
+  float bt = t * 0.9; // self-driven drift clock, decoupled from state speed
+  vec2 d0 = reach * vec2(snoise(vec3(bt * 0.16, 0.0, 1.0)),
+                         snoise(vec3(bt * 0.16, 1.0, 0.0)));
+  vec2 d1 = reach * vec2(snoise(vec3(bt * 0.12, 9.0, 0.0)),
+                         snoise(vec3(bt * 0.12, 0.0, 9.0)));
+  vec2 d2 = reach * vec2(snoise(vec3(bt * 0.09, 5.0, 2.0)),
+                         snoise(vec3(bt * 0.09, 2.0, 5.0)));
+  vec2 c0 = pingpong(length(d0), edge) * normalize(d0 + vec2(1e-3, 0.0));
+  vec2 c1 = pingpong(length(d1), edge) * normalize(d1 + vec2(1e-3, 0.0));
+  vec2 c2 = pingpong(length(d2), edge) * normalize(d2 + vec2(1e-3, 0.0));
   // Tighter falloffs so the clouds read as distinct, defined colour zones (a
   // mesh gradient) rather than melting into one uniform blur — still soft.
-  float b0 = smoothstep(0.85, 0.12, length(sp - c0));
-  float b1 = smoothstep(0.95, 0.12, length(sp - c1));
-  float b2 = smoothstep(0.78, 0.12, length(sp - c2));
+  float b0 = smoothstep(1.05, 0.1, length(sp - c0));
+  float b1 = smoothstep(1.15, 0.1, length(sp - c1));
+  float b2 = smoothstep(0.98, 0.1, length(sp - c2));
 
   // One drifting "light source" spot — the orb is most transparent here, so the
   // background shines through more (a glowing window; reads as depth on dark).

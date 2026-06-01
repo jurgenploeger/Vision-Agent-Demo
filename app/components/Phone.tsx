@@ -1,6 +1,6 @@
 "use client";
 
-import { List, Sun, Moon, Microphone } from "@phosphor-icons/react";
+import { SlidersHorizontal, Sun, Moon, Microphone } from "@phosphor-icons/react";
 import styles from "./Phone.module.css";
 import type { Viz } from "../page";
 import Orb from "./visualizations/Orb";
@@ -32,7 +32,7 @@ export default function Phone({
         <header className={styles.header}>
           {showMenu ? (
             <button className={styles.iconBtn} aria-label="Open settings" onClick={onMenu}>
-              <List size={20} />
+              <SlidersHorizontal size={20} />
             </button>
           ) : (
             <span className={styles.iconBtn} aria-hidden />
@@ -74,14 +74,12 @@ export default function Phone({
         {/* Bottom input bar */}
         <div className={styles.dock}>
           <div className={styles.field}>
-            <span className={styles.fieldHint}>Tap to speak</span>
+            <span className={styles.fieldHint}>Send a message</span>
           </div>
           <button className={styles.mic} aria-label="Microphone">
             <Microphone size={22} weight="fill" />
           </button>
         </div>
-
-        <div className={styles.homeBar} aria-hidden />
       </div>
     </div>
   );

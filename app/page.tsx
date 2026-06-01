@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sun, Moon, X } from "@phosphor-icons/react";
 import styles from "./page.module.css";
 import Phone from "./components/Phone";
@@ -41,6 +41,20 @@ export default function Page() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  // Swipe shortcut (mobile): swipe down opens the settings sheet, up closes it.
+  const touchStartY = useRef<number | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0]?.clientY ?? null;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStartY.current;
+    touchStartY.current = null;
+    if (!isMobile || start == null) return;
+    const dy = (e.changedTouches[0]?.clientY ?? start) - start;
+    if (dy > 60 && !menuOpen) setMenuOpen(true);
+    else if (dy < -60 && menuOpen) setMenuOpen(false);
+  };
 
   const toggleTheme = () =>
     setTheme((t) => (t === "light" ? "dark" : "light"));
@@ -93,7 +107,7 @@ export default function Page() {
   };
 
   return (
-    <main className={styles.stage}>
+    <main className={styles.stage} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {/* Desktop: theme toggle lives at the top-right of the page. */}
       {!isMobile && (
         <button
@@ -137,7 +151,6 @@ export default function Page() {
             onClick={() => setMenuOpen(false)}
           />
           <div className={styles.sheetPanel}>
-            <span className={styles.sheetGrabber} aria-hidden />
             <div className={styles.sheetHead}>
               <span className={styles.sheetTitle}>Settings</span>
               <button
