@@ -7,7 +7,7 @@ import Phone from "./components/Phone";
 import Controls from "./components/Controls";
 import { AgentState } from "./components/visualizations/states";
 
-export type Viz = "orb" | "wave" | "pulse";
+export type Viz = "orb" | "aura" | "wave";
 
 // Deep electric blue-violet so the first render looks intentional (Siri-like).
 const DEFAULT_HUE = 252;
@@ -18,6 +18,9 @@ export default function Page() {
   const [viz, setViz] = useState<Viz>("orb");
   const [state, setState] = useState<AgentState>("listening");
   const [colors, setColors] = useState<number[]>([DEFAULT_HUE]); // 1-3 hues
+  // Stable per-colour ids so colour rows can animate in/out by identity.
+  const [colorIds, setColorIds] = useState<number[]>([0]);
+  const colorIdSeq = useRef(1);
   const [theme, setTheme] = useState<Theme>("light");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -72,10 +75,36 @@ export default function Page() {
       applyProgress();
     });
   };
-  const openSheet = () =>
-    hostRef.current?.scrollTo({ top: hostRef.current.clientHeight, behavior: "smooth" });
-  const closeSheet = () =>
-    hostRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  // Custom tween for tap-to-open/close — snappier than the browser's built-in
+  // smooth scroll (whose duration we can't control). Snap is disabled during
+  // the tween so mandatory snapping doesn't fight it, then always restored.
+  const tweenRef = useRef<number | null>(null);
+  const tweenScroll = (to: number) => {
+    const host = hostRef.current;
+    if (!host) return;
+    if (tweenRef.current != null) cancelAnimationFrame(tweenRef.current);
+    const from = host.scrollTop;
+    const dist = to - from;
+    if (Math.abs(dist) < 1) return;
+    const dur = 230; // ms
+    const ease = (x: number) => 1 - Math.pow(1 - x, 3); // ease-out cubic
+    host.style.scrollSnapType = "none";
+    let start: number | null = null;
+    const step = (ts: number) => {
+      if (start == null) start = ts;
+      const k = Math.min(1, (ts - start) / dur);
+      host.scrollTop = from + dist * ease(k);
+      if (k < 1) {
+        tweenRef.current = requestAnimationFrame(step);
+      } else {
+        tweenRef.current = null;
+        host.style.scrollSnapType = ""; // back to CSS (mandatory)
+      }
+    };
+    tweenRef.current = requestAnimationFrame(step);
+  };
+  const openSheet = () => tweenScroll(hostRef.current?.clientHeight ?? 0);
+  const closeSheet = () => tweenScroll(0);
 
   const toggleTheme = () => {
     userOverrodeTheme.current = true;
@@ -83,10 +112,16 @@ export default function Page() {
   };
   const setColorAt = (i: number, hue: number) =>
     setColors((c) => c.map((h, idx) => (idx === i ? hue : h)));
-  const addColor = () =>
+  const addColor = () => {
     setColors((c) => (c.length >= 3 ? c : [...c, (c[c.length - 1] + 80) % 360]));
-  const removeColor = (i: number) =>
+    setColorIds((ids) =>
+      ids.length >= 3 ? ids : [...ids, colorIdSeq.current++]
+    );
+  };
+  const removeColor = (i: number) => {
     setColors((c) => (c.length <= 1 ? c : c.filter((_, idx) => idx !== i)));
+    setColorIds((ids) => (ids.length <= 1 ? ids : ids.filter((_, idx) => idx !== i)));
+  };
   // Shuffle picks a random base hue + a classic harmony scheme (analogous,
   // complementary, triadic, split-complementary) so the result always reads as
   // an intentional, harmonized palette rather than a random clash.
@@ -123,6 +158,7 @@ export default function Page() {
     state,
     setState,
     colors,
+    colorIds,
     setColorAt,
     addColor,
     removeColor,

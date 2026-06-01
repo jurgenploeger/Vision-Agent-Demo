@@ -218,36 +218,52 @@
   flex-direction: column;
 }
 
-/* Each row expands its height from 0 on insert (grid 0fr -> 1fr), so adding a
-   colour grows the bottom-anchored sheet up smoothly instead of jumping. */
+/* Each row animates its pixel height (0 <-> 36px) — a plain height tween
+   interpolates smoothly per frame, unlike grid `fr` which the browser steps
+   in coarse jumps. Rows are a uniform 36px (26px content + 10px gap). */
 .colorRow {
-  display: grid;
-  grid-template-rows: 1fr;
-  animation: colorRowIn 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+  animation: colorRowIn 0.38s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 @keyframes colorRowIn {
   from {
-    grid-template-rows: 0fr;
+    height: 0;
     opacity: 0;
   }
   to {
-    grid-template-rows: 1fr;
+    height: 36px;
     opacity: 1;
   }
 }
 
+/* Removing a colour reverses the add: the row collapses (36px -> 0) before it
+   is dropped from state, so the sheet shrinks down as smoothly as it grew. */
+.colorRowExiting {
+  animation: colorRowOut 0.38s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes colorRowOut {
+  from {
+    height: 36px;
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .colorRow {
+  .colorRow,
+  .colorRowExiting {
     animation: none;
   }
 }
 
-/* The animating grid child must clip + allow 0 height for the fold to work.
-   Bottom padding (inside the clip) is the gap between rows. */
+/* Fixed-height row content; the 10px bottom padding is the gap between rows. */
 .colorRowInner {
-  overflow: hidden;
-  min-height: 0;
+  height: 36px;
   display: flex;
   align-items: center;
   gap: 10px;
