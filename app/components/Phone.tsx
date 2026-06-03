@@ -33,6 +33,55 @@ export default function Phone({
   const canSend = message.trim().length >= 1;
   const send = () => setMessage("");
 
+  // Desktop variant: user-resizable window. `size` is null until the first
+  // drag, so the CSS default (min(1040px, 92vw)) applies until then; once set,
+  // an explicit px size takes over and persists across mobile<->desktop toggles.
+  const isDesktop = variant === "desktop";
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const [resizing, setResizing] = useState(false);
+  // dirX/dirY: which edges this handle drives (1 = active, 0 = unchanged).
+  const drag = useRef<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    dirX: number;
+    dirY: number;
+  } | null>(null);
+
+  const startResize =
+    (dirX: number, dirY: number) => (e: React.PointerEvent<HTMLElement>) => {
+      const el = frameRef.current;
+      if (!el) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      drag.current = { x: e.clientX, y: e.clientY, w: r.width, h: r.height, dirX, dirY };
+      setResizing(true);
+      e.currentTarget.setPointerCapture(e.pointerId);
+    };
+  const onResizeMove = (e: React.PointerEvent<HTMLElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    const maxW = window.innerWidth * 0.96;
+    const maxH = window.innerHeight * 0.94;
+    // The window is centered, so an edge moves at half the rate the box grows;
+    // apply 2x the pointer delta so the handle tracks the cursor.
+    const w = Math.max(480, Math.min(maxW, d.w + d.dirX * (e.clientX - d.x) * 2));
+    const h = Math.max(360, Math.min(maxH, d.h + d.dirY * (e.clientY - d.y) * 2));
+    setSize((prev) => ({
+      w: d.dirX ? w : prev?.w ?? d.w,
+      h: d.dirY ? h : prev?.h ?? d.h,
+    }));
+  };
+  const endResize = (e: React.PointerEvent<HTMLElement>) => {
+    drag.current = null;
+    setResizing(false);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+  };
+
   // Tapping the orb gives it a gentle springy bounce — a small bit of delight.
   const bouncerRef = useRef<HTMLDivElement>(null);
   const onVizClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -60,10 +109,12 @@ export default function Phone({
     );
   };
 
-  const isDesktop = variant === "desktop";
-
   return (
-    <div className={`${styles.phone} ${isDesktop ? styles.desktop : ""}`}>
+    <div
+      ref={frameRef}
+      className={`${styles.phone} ${isDesktop ? styles.desktop : ""} ${resizing ? styles.resizing : ""}`}
+      style={isDesktop && size ? { width: size.w, height: size.h } : undefined}
+    >
       <div className={`${styles.screen} ${isDesktop ? styles.screenDesktop : ""}`}>
         {/* Aura: aurora glow that hangs from the top of the screen, behind the
             header (spans the top third). Hidden unless the Aura style is on. */}
@@ -142,6 +193,33 @@ export default function Phone({
           </div>
         </div>
       </div>
+
+      {/* Resize handles — desktop variant only (right edge, bottom edge, corner). */}
+      {isDesktop && (
+        <>
+          <span
+            className={`${styles.resizeHandle} ${styles.resizeE}`}
+            onPointerDown={startResize(1, 0)}
+            onPointerMove={onResizeMove}
+            onPointerUp={endResize}
+            aria-hidden
+          />
+          <span
+            className={`${styles.resizeHandle} ${styles.resizeS}`}
+            onPointerDown={startResize(0, 1)}
+            onPointerMove={onResizeMove}
+            onPointerUp={endResize}
+            aria-hidden
+          />
+          <span
+            className={`${styles.resizeHandle} ${styles.resizeSE}`}
+            onPointerDown={startResize(1, 1)}
+            onPointerMove={onResizeMove}
+            onPointerUp={endResize}
+            aria-hidden
+          />
+        </>
+      )}
     </div>
   );
 }

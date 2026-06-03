@@ -3,6 +3,7 @@
      viewports; the page scrolls instead of the phone collapsing. Width is
      derived from the same height so both dimensions are concrete lengths —
      that lets the mobile<->desktop variant swap animate smoothly. */
+  position: relative;
   height: clamp(460px, calc(100dvh - 360px), 720px);
   width: calc(clamp(460px, calc(100dvh - 360px), 720px) * 390 / 844);
   border-radius: 52px;
@@ -40,13 +41,65 @@
   border-radius: 8px;
   padding: 0;
 }
-.screenDesktop {
+.screen.screenDesktop {
   border-radius: 8px;
+  /* Same hairline stroke as the mobile phone frame's outline. */
+  box-shadow: inset 0 0 0 1px var(--edge);
 }
 /* Inset the composer so it doesn't span the full width of the wider window. */
 .screenDesktop .dock {
   padding-left: max(16px, 18%);
   padding-right: max(16px, 18%);
+}
+
+/* While actively dragging a resize handle, kill the morph transition so the
+   window tracks the pointer immediately instead of easing behind it. */
+.resizing {
+  transition: background 0.4s ease, outline-color 0.4s ease;
+}
+
+/* Resize handles (desktop variant only) — let you grow/shrink the window even
+   when the viewport is large enough that it's capped at min(1040px, 92vw). */
+.resizeHandle {
+  position: absolute;
+  z-index: 5;
+  background: var(--muted);
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  touch-action: none;
+}
+.desktop:hover .resizeHandle,
+.resizing .resizeHandle {
+  opacity: 0.45;
+}
+.resizeHandle:hover {
+  opacity: 0.85;
+}
+.resizeE {
+  top: 50%;
+  right: 0;
+  width: 6px;
+  height: 46px;
+  transform: translate(50%, -50%);
+  cursor: ew-resize;
+}
+.resizeS {
+  left: 50%;
+  bottom: 0;
+  width: 46px;
+  height: 6px;
+  transform: translate(-50%, 50%);
+  cursor: ns-resize;
+}
+.resizeSE {
+  right: 0;
+  bottom: 0;
+  width: 15px;
+  height: 15px;
+  border-radius: 5px;
+  transform: translate(38%, 38%);
+  cursor: nwse-resize;
 }
 
 /* On a phone, fill the whole page so it reads like a real installed app. */
