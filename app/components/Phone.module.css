@@ -131,6 +131,21 @@
   .field .input {
     font-size: 16px;
   }
+  /* On a real phone there's no device toggle or window resize, so the cqmin/
+     size-container sizing isn't needed — and mobile Safari handles size
+     containment inconsistently, which threw the visual off-centre. Fall back to
+     the simple, bulletproof "fill the slot" sizing, which always centres. The
+     `.screen` prefix raises specificity so this beats the base rules, which are
+     defined later in the file. */
+  .screen .viz {
+    container-type: normal;
+  }
+  .screen .bouncer {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+  }
 }
 
 /* ---------- Header icon buttons (hamburger + theme) ---------- */
