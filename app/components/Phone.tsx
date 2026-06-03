@@ -5,7 +5,7 @@ import { SlidersHorizontal, Sun, Moon, Microphone, ArrowUp } from "@phosphor-ico
 import styles from "./Phone.module.css";
 import type { Viz } from "../page";
 import Orb from "./visualizations/Orb";
-import Sphere from "./visualizations/Sphere";
+import Glow from "./visualizations/Glow";
 import Ring from "./visualizations/Ring";
 import Aura from "./visualizations/Aura";
 import Wave from "./visualizations/Wave";
@@ -85,7 +85,7 @@ export default function Phone({
   };
 
   // Tapping the visualization gives it a gentle springy bounce — a small bit of
-  // delight, shared by every style (orb/sphere/ring/wave live in the bouncer;
+  // delight, shared by every style (orb/glow/ring/wave live in the bouncer;
   // the aura fills its own full-screen layer). Only the active one is visible,
   // so bouncing both is harmless.
   const bouncerRef = useRef<HTMLDivElement>(null);
@@ -137,7 +137,7 @@ export default function Phone({
         const dx = (e.clientX - (rect.left + rect.width / 2)) / m;
         const dy = (e.clientY - (rect.top + rect.height / 2)) / m;
         const dist = Math.hypot(dx, dy);
-        if (viz === "orb" || viz === "sphere") hit = dist < 0.32;
+        if (viz === "orb" || viz === "glow") hit = dist < 0.32;
         else if (viz === "ring") hit = dist < 0.46;
         else hit = Math.abs(dy) < 0.14 && Math.abs(dx) < 0.5; // wave: the line band
       }
@@ -202,8 +202,8 @@ export default function Phone({
             <div className={`${styles.vizLayer} ${viz === "orb" ? styles.vizOn : ""}`}>
               <Orb hues={hues} running={viz === "orb"} state={state} dark={dark} />
             </div>
-            <div className={`${styles.vizLayer} ${viz === "sphere" ? styles.vizOn : ""}`}>
-              <Sphere hues={hues} running={viz === "sphere"} state={state} dark={dark} />
+            <div className={`${styles.vizLayer} ${viz === "glow" ? styles.vizOn : ""}`}>
+              <Glow hues={hues} running={viz === "glow"} state={state} dark={dark} />
             </div>
             <div className={`${styles.vizLayer} ${viz === "ring" ? styles.vizOn : ""}`}>
               <Ring hues={hues} running={viz === "ring"} state={state} dark={dark} />

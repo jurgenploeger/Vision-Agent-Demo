@@ -251,17 +251,19 @@
   min-height: 0;
   display: grid;
   place-items: center;
+  /* Size container so the bouncer can size itself off the SHORTER viz edge. */
+  container-type: size;
 }
 
-/* Wrapper that the tap-bounce scales (keeps the canvas mounted). The visual is
-   a size-clamped square tied to the shorter dimension — the SAME sizing in both
-   the mobile and desktop frames, so toggling between them morphs the size
-   smoothly instead of snapping, and resizing the desktop window only nudges it. */
+/* Wrapper that the tap-bounce scales (keeps the canvas mounted). A square sized
+   to the SHORTER viz edge (cqmin) and capped at 360px, so it always fits inside
+   the frame (no overflow that would push it off-centre) and stays centred. It's
+   the same sizing in both the mobile and desktop frames, so toggling morphs the
+   size smoothly, and resizing the desktop window only nudges it (the 360 cap). */
 .bouncer {
   position: relative;
-  height: clamp(220px, 70%, 360px);
-  width: auto;
-  aspect-ratio: 1 / 1;
+  width: min(100cqmin, 360px);
+  height: min(100cqmin, 360px);
   transform-origin: 50% 50%;
   will-change: transform;
 }
