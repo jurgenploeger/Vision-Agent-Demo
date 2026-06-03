@@ -120,7 +120,9 @@
   padding: 20px 20px max(20px, env(safe-area-inset-bottom));
   background: var(--device-bg);
   border-radius: 22px 22px 0 0;
-  box-shadow: 0 -12px 40px -12px rgba(0, 0, 0, 0.4);
+  /* Alpha tracks scroll progress so the upward shadow doesn't bleed into the
+     bottom of the viewport while the sheet is parked off-screen (--p = 0). */
+  box-shadow: 0 -12px 40px -12px rgba(0, 0, 0, calc(0.4 * var(--p)));
   transform: translateY(calc((1 - var(--p)) * 100%));
   will-change: transform;
   pointer-events: none;

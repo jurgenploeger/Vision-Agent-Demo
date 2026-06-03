@@ -216,7 +216,7 @@
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: inset 0 0 0 1px var(--composer-edge);
+  box-shadow: inset 0 0 0 1px var(--composer-edge), var(--composer-shadow);
 }
 
 .input {
@@ -235,6 +235,10 @@
 }
 .input::placeholder {
   color: var(--field-hint);
+  /* Shrink only the placeholder. The input itself stays at 16px on mobile (see
+     the .field .input override above), so iOS/Android don't auto-zoom on focus —
+     the zoom heuristic reads the field's font-size, not the placeholder's. */
+  font-size: 13px;
 }
 
 /* Inline audio button — transparent, lives at the right of the composer. */
