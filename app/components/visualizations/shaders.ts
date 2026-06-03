@@ -310,18 +310,21 @@ void main() {
 `;
 
 /* ------------------------------------------------------------------ */
-/* SPHERE — a soft GLOBE: like the Orb but with soft, round edges (no hard  */
-/* circle line). Solid through the core with a gentle round falloff, soft   */
-/* 3D volume shading, and drifting interior colour. No specular hotspot.    */
+/* GLOW — a soft, blurred GLOBE: like the Orb but with soft, round edges    */
+/* (no hard circle line). Solid through the core with a gentle round         */
+/* falloff, soft 3D volume shading, and drifting interior colour. No         */
+/* specular hotspot. Pulses noticeably while speaking.                       */
 /* ------------------------------------------------------------------ */
-export const SPHERE_FRAGMENT = HEADER + SNOISE + COORDS + /* glsl */ `
+export const GLOW_FRAGMENT = HEADER + SNOISE + COORDS + /* glsl */ `
 void main() {
   vec2 q = coords();
   float t = uTime;
   float r = length(q);
 
   float speech = uReact * speechEnv(t);      // 0..~1 while speaking, ~0 in pauses
-  float R = 0.24 * (1.0 + speech * 0.08);    // same base size as the Orb
+  // Same resting size as the Orb, but a much bigger size pulse on speech — the
+  // glow is soft/blurred, so it needs a larger swell for the pulse to read.
+  float R = 0.24 * (1.0 + speech * 0.20);
   float p = r / R;                           // normalized radius (0 centre, 1 rim)
 
   // Soft globe body: solid through the core, then a soft round falloff to 0.
@@ -329,7 +332,7 @@ void main() {
   float body = smoothstep(1.06, 0.62, p);
 
   // Drifting interior colour, displaced by concentric ripples so the shapes
-  // read as moving WAVES inside the sphere (livelier while speaking).
+  // read as moving WAVES inside the glow (livelier while speaking).
   vec2 P = q / R;
   float pl = length(P);
   float nt = t * 0.10;
