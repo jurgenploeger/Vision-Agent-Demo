@@ -140,11 +140,11 @@
   .dock {
     padding-bottom: max(18px, env(safe-area-inset-bottom));
   }
-  /* Larger, comfortable composer text on mobile. Stays >=16px so iOS Safari
-     doesn't auto-zoom on focus. Higher specificity than the base `.input` rule
-     (defined later in the file) so it actually wins. */
+  /* 16px on mobile: large enough that iOS Safari doesn't auto-zoom on focus.
+     Higher specificity than the base `.input` rule (defined later in the file)
+     so it actually wins. */
   .field .input {
-    font-size: 17px;
+    font-size: 16px;
   }
 }
 

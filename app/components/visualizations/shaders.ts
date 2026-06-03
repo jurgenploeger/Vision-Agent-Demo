@@ -310,10 +310,9 @@ void main() {
 `;
 
 /* ------------------------------------------------------------------ */
-/* SPHERE — a glassy GLOBE: a translucent dark sphere with a bright       */
-/* Fresnel rim and vivid neon colour blobs flowing inside. The body is    */
-/* see-through (dark glass on dark, light glass on light); the blobs, the  */
-/* rim and a tight specular hotspot are the bright, opaque parts.         */
+/* SPHERE — a soft GLOBE: like the Orb but with soft, round edges (no hard  */
+/* circle line). Solid through the core with a gentle round falloff, soft   */
+/* 3D volume shading, and drifting interior colour. No specular hotspot.    */
 /* ------------------------------------------------------------------ */
 export const SPHERE_FRAGMENT = HEADER + SNOISE + COORDS + /* glsl */ `
 void main() {
@@ -323,90 +322,56 @@ void main() {
 
   float speech = uReact * speechEnv(t);      // 0..~1 while speaking, ~0 in pauses
   float R = 0.24 * (1.0 + speech * 0.08);    // same base size as the Orb
-  float aa = 1.6 / min(uResolution.x, uResolution.y);
+  float p = r / R;                           // normalized radius (0 centre, 1 rim)
 
-  // Soft-edged sphere disc; the bright rim (below) defines the silhouette.
-  float disc = 1.0 - smoothstep(R - 3.0 * aa, R + 2.0 * aa, r);
-  // Hemisphere normal for glassy shading + rim.
-  float z = sqrt(max(R * R - r * r, 0.0));
-  vec3 nrm = normalize(vec3(q, z + 1e-4));
+  // Soft globe body: solid through the core, then a soft round falloff to 0.
+  float core = exp(-2.0 * p * p);
+  float body = smoothstep(1.06, 0.62, p);
 
-  // Interior coords with a SWIRLING vortex + turbulent warp, so the colour
-  // ribbons flow and twist like the frozen swirls inside a glass marble —
-  // much livelier while speaking. The swirl is radius-dependent (a vortex).
-  vec2 P = q / R;
-  float pr = length(P);
-  float swirl = (0.6 + 2.2 * speech) * (0.55 - 0.35 * pr) + t * 0.22 * (0.4 + speech);
-  vec2 Ps = rot2(P, swirl);
-  float nt = t * 0.12;
-  float nAmp = 0.14 + 0.34 * speech;          // warps far more on speech
-  vec2 sp = Ps + nAmp * vec2(
-      snoise(vec3(Ps * 0.8, nt)) + 0.5 * snoise(vec3(Ps * 1.9, nt * 1.4)),
-      snoise(vec3(Ps * 0.8 + 4.7, nt)) + 0.5 * snoise(vec3(Ps * 1.9 + 2.0, nt * 1.4)));
-
-  // Vivid, neon palette. Saturation is eased back in LIGHT mode and the deep
-  // shade is kept bright there, so the blobs never read as near-black on the
-  // white page (dark mode keeps the deep, glassy look).
-  float blobSat = mix(1.6, 2.0, uDark);
-  vec3 k0 = saturate3(vivid(uHue),  blobSat);
-  vec3 k1 = saturate3(vivid(uHue1), blobSat);
-  vec3 k2 = saturate3(vivid(uHue2), blobSat);
-  vec3 kLight = saturate3(clamp(vivid(uHue) * 1.25, 0.0, 1.0), mix(1.45, 1.7, uDark));
-  vec3 kDeep  = saturate3(vivid(uHue) * mix(1.0, 0.72, uDark), mix(1.5, 1.95, uDark));
-  vec3 colB = mix(kLight, k1, clamp(uCount - 1.0, 0.0, 1.0));
-  vec3 colC = mix(kDeep,  k2, clamp(uCount - 2.0, 0.0, 1.0));
-
-  // A few big soft colour blobs circulating inside (like a lava lamp).
+  // Drifting interior colour clouds (orb-like), soft and simple.
+  float nt = t * 0.10;
+  float nAmp = 0.18 + 0.16 * speech;
+  vec2 sp = (q / R) + nAmp * vec2(snoise(vec3(q / R * 0.7, nt)),
+                                  snoise(vec3(q / R * 0.7 + 4.7, nt)));
   float bt = t;
-  float a0 =  bt * 0.40 + 2.0 * snoise(vec3(bt * 0.12, 0.0, 0.0));
-  float a1 = -bt * 0.33 + 2.0 * snoise(vec3(bt * 0.10, 5.0, 0.0)) + 2.1;
-  float a2 =  bt * 0.27 + 2.0 * snoise(vec3(bt * 0.08, 9.0, 0.0)) + 4.2;
-  vec2 c0 = 0.42 * vec2(cos(a0), sin(a0));
-  vec2 c1 = 0.46 * vec2(cos(a1), sin(a1));
-  vec2 c2 = 0.40 * vec2(cos(a2), sin(a2));
-  float g0 = smoothstep(0.95, 0.04, length(sp - c0));
-  float g1 = smoothstep(1.05, 0.04, length(sp - c1));
-  float g2 = smoothstep(1.00, 0.04, length(sp - c2));
-  vec3 glow = k0 * g0 + colB * g1 + colC * g2;
-  float glowAmt = clamp(g0 + g1 + g2, 0.0, 1.0);
-  glow = desat(glow, uSat);
+  float a0 =  bt * 0.42 + 2.0 * snoise(vec3(bt * 0.12, 0.0, 0.0));
+  float a1 = -bt * 0.34 + 2.0 * snoise(vec3(bt * 0.10, 5.0, 0.0)) + 2.0;
+  vec2 c0 = 0.40 * vec2(cos(a0), sin(a0));
+  vec2 c1 = 0.38 * vec2(cos(a1), sin(a1));
+  float b0 = smoothstep(1.15, 0.1, length(sp - c0));
+  float b1 = smoothstep(1.30, 0.1, length(sp - c1));
 
-  // Glassy shading: a tight top-left specular hotspot.
-  vec3 Ld = normalize(vec3(-0.32, 0.5, 0.8));
+  vec3 k0   = saturate3(vivid(uHue), 1.7);
+  vec3 kL   = saturate3(clamp(vivid(uHue) * 1.18, 0.0, 1.0), 1.3);
+  vec3 kD   = saturate3(vivid(uHue) * 0.62, 1.4);
+  vec3 colB = mix(kL, saturate3(vivid(uHue1), 1.7), clamp(uCount - 1.0, 0.0, 1.0));
+  vec3 colC = mix(kD, saturate3(vivid(uHue2), 1.7), clamp(uCount - 2.0, 0.0, 1.0));
+  vec3 base = saturate3(mix(vivid(uHue), vec3(1.0), 0.06), 1.3);
+  vec3 col = base;
+  col = mix(col, k0,   b0);
+  col = mix(col, colB, b1);
+  col = mix(col, colC, b0 * 0.5);
+  col = desat(col, uSat);
+
+  // Soft 3D globe shading (lit upper-left), gentle so the edge stays soft.
+  // No specular hotspot — there's no bright light-source blip.
+  float z = sqrt(max(1.0 - p * p, 0.0));
+  vec3 nrm = normalize(vec3(q / R, z + 1e-4));
+  vec3 Ld = normalize(vec3(-0.35, 0.45, 0.85));
   float diff = clamp(dot(nrm, Ld), 0.0, 1.0);
-  float spec = pow(diff, 18.0);
+  col *= 0.66 + 0.34 * diff;
+  float fres = pow(1.0 - clamp(nrm.z, 0.0, 1.0), 2.5);
+  col += fres * 0.10 * mix(vec3(1.0), k0, 0.6); // faint, soft rim tint
 
-  // Fresnel bright RIM — the signature thin bright edge of the glass globe.
-  float fres = pow(1.0 - clamp(nrm.z, 0.0, 1.0), 3.0);
-  // Rim: whiteish on dark (like the reference), saturated hue on light so it
-  // still reads against the white page.
-  vec3 rimCol = mix(saturate3(vivid(uHue), 1.6),
-                    mix(vec3(1.0), vivid(uHue), 0.25), uDark);
-
-  // Glass body base: dark hue-tinted glass on DARK (the reference look), but a
-  // pale airy tint on LIGHT — never black, which looks muddy on the white page.
-  vec3 glassBase = mix(mix(vivid(uHue), vec3(1.0), 0.72), deepHue(uHue) * 0.45, uDark);
-  vec3 col = glassBase;
-  // Gentle hue-preserving shading for 3D (darkens toward the unlit side without
-  // ever going black, so light mode stays clean).
-  col *= mix(0.80, 1.06, diff);
-  col = mix(col, glow, glowAmt);
-  col += spec * 0.7;
-  col = mix(col, rimCol, fres * 0.92);
-  col = clamp(col, 0.0, 1.6);
-
-  // Opacity: mostly see-through glass, opaque where the blobs / rim / hotspot are.
-  float bodyOp = mix(0.16, 0.10, uDark);
-  float opacity = disc * clamp(bodyOp + 0.85 * glowAmt + 0.9 * fres + 0.5 * spec, 0.0, 1.0);
-
-  // Soft outer halo just beyond the rim.
-  float halo = exp(-pow(max(r - R, 0.0) / 0.06, 2.0)) * (1.0 - disc);
+  // Composite: soft globe over a soft halo (premultiplied).
+  vec3 haloCol = mix(mix(vivid(uHue), vec3(1.0), 0.75),
+                     mix(vivid(uHue), vec3(1.0), 0.32), uDark);
+  float halo = exp(-pow(max(r - R * 0.8, 0.0) / 0.09, 2.0));
   float haloA = halo * (mix(0.05, 0.10, uDark) + 0.05 * uReact);
-  vec3 haloCol = mix(vivid(uHue), vec3(1.0), 0.4);
-
+  float bodyA = clamp(body * (0.74 + 0.26 * core) * (0.9 + 0.1 * fres), 0.0, 1.0);
   float fade = mix(1.0, 0.45 + 0.35 * sin(t * 2.0), uLoad);
-  vec3 pm = col * opacity + haloCol * haloA * (1.0 - opacity);
-  float al = opacity + haloA * (1.0 - opacity);
+  vec3 pm = col * bodyA + haloCol * haloA * (1.0 - bodyA);
+  float al = bodyA + haloA * (1.0 - bodyA);
   float g = uBright * fade;
   gl_FragColor = vec4(pm * g, al * g);
 }
@@ -438,15 +403,18 @@ void main() {
   float idx = floor(pos);
   float cell = fract(pos) - 0.5;            // -0.5..0.5 within a bar slot
 
-  // --- Per-bar amplitude (0..1): a broad travelling swell sets WHERE the
-  // energy is (a couple of peak regions), and per-bar noise gives each bar its
-  // own height inside that — so the peaks are spiky/bespoke (distinct bars)
-  // rather than one smooth wave. Animated at a moderate rate (lively, not
-  // frantic), sharpened so valleys stay low. ---
+  // --- Per-bar amplitude (0..1): the energy concentrates into a few GROUPS
+  // (clusters of tall bars) at slowly drifting angular positions, and per-bar
+  // noise gives each bar in a group its own height — so the peaks read as
+  // bespoke grouped clusters with low gaps between them, not one smooth wave.
+  // The groups are periodic (von Mises) so they're seamless around the ring. ---
   float ph = idx * (TAU / N);
-  float env = 0.40 + 0.60 * (0.5 + 0.5 * sin(ph * 2.0 - t * 1.2)); // broad swell (~2 regions)
-  float perBar = 0.5 + 0.5 * snoise(vec3(idx * 0.7, t * 1.0, 0.0)); // individual bar heights
-  float spec = pow(clamp(env * perBar, 0.0, 1.0), 1.7); // distinct, spiky peaks
+  float grp = max(
+      exp(3.2 * (cos(ph - t * 0.55) - 1.0)),
+      max(exp(3.2 * (cos(ph - t * 0.55 - 2.3) - 1.0)),
+          exp(3.2 * (cos(ph + t * 0.5 + 1.4) - 1.0))));
+  float perBar = 0.5 + 0.5 * snoise(vec3(idx * 0.8, t * 1.0, 0.0)); // individual bar heights
+  float spec = pow(clamp(grp * (0.4 + 0.6 * perBar), 0.0, 1.0), 1.25); // bespoke grouped peaks
 
   // Connecting: all bars breathe together (a calm "working" pulse), no sweep.
   float pulse = 0.30 + 0.40 * (0.5 + 0.5 * sin(t * 2.2));
@@ -456,9 +424,9 @@ void main() {
   // While speaking, the speech envelope makes the whole fringe ebb in pauses.
   float energy = mix(0.16, 1.0, uReact);
   float talk = mix(1.0, 0.45 + 0.55 * speechEnv(t), step(0.5, uReact));
-  // Small base so the valleys sit low (near the ring) and the peaks stand out.
-  // Moderate max length keeps the speaking fringe even, not wildly wavy.
-  float L = 0.005 + (0.135 * spec * energy) * talk + 0.006 * uReact;
+  // Small base so the gaps between groups sit low (near the ring) and the
+  // grouped peaks stand out.
+  float L = 0.005 + (0.155 * spec * energy) * talk + 0.006 * uReact;
 
   // --- Bar mask: angular fill (with gaps) x radial extent (R0 -> R0+L) ---
   float barHalf = 0.34;                     // fraction of each cell the bar fills
