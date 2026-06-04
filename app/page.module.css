@@ -74,6 +74,19 @@
 
 /* ---------- Page theme toggle (desktop, top-right) ---------- */
 
+/* Stream logo, top-left (desktop only). Sits in a 40px-tall band so it lines up
+   vertically with the round theme toggle on the right. */
+.brand {
+  position: fixed;
+  top: 20px;
+  left: 24px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  color: var(--text); /* the wordmark uses currentColor; the mark stays blue */
+}
+
 .themeToggle {
   position: fixed;
   top: 20px;

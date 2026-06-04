@@ -5,6 +5,7 @@ import { Sun, Moon, X, DeviceMobile, Monitor } from "@phosphor-icons/react";
 import styles from "./page.module.css";
 import Phone from "./components/Phone";
 import Controls from "./components/Controls";
+import StreamLogo from "./components/StreamLogo";
 import { AgentState } from "./components/visualizations/states";
 import {
   type Color,
@@ -13,7 +14,7 @@ import {
   shuffleColors,
 } from "./components/color";
 
-export type Viz = "orb" | "glow" | "ring" | "aura" | "wave";
+export type Viz = "orb" | "glow" | "sphere" | "ring" | "aura" | "wave";
 
 type Theme = "light" | "dark";
 
@@ -160,9 +161,13 @@ export default function Page() {
 
   return (
     <main className={styles.stage}>
-      {/* Desktop: theme toggle top-right, phone centered, controls below. */}
+      {/* Desktop: Stream logo top-left, theme toggle top-right, phone centered. */}
       {!isMobile && (
         <>
+          <div className={styles.brand} aria-hidden={false}>
+            <StreamLogo />
+          </div>
+
           <button
             className={styles.themeToggle}
             aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}

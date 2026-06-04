@@ -6,6 +6,7 @@ import styles from "./Phone.module.css";
 import type { Viz } from "../page";
 import Orb from "./visualizations/Orb";
 import Glow from "./visualizations/Glow";
+import Sphere from "./visualizations/Sphere";
 import Ring from "./visualizations/Ring";
 import Aura from "./visualizations/Aura";
 import Wave from "./visualizations/Wave";
@@ -28,7 +29,7 @@ export default function Phone({
   colors: Color[];
   state: AgentState;
   dark: boolean;
-  vizScale?: number; // size multiplier for orb/glow/ring/wave (not aura)
+  vizScale?: number; // size multiplier for the centred visual (all styles)
   showMenu: boolean; // mobile: header carries the hamburger + theme toggle
   onMenu: () => void;
   onToggleTheme: () => void;
@@ -88,30 +89,17 @@ export default function Phone({
   };
 
   // Tapping the visualization gives it a gentle springy bounce — a small bit of
-  // delight, shared by every style (orb/glow/ring/wave live in the bouncer;
-  // the aura fills its own full-screen layer). Only the active one is visible,
-  // so bouncing both is harmless.
+  // delight, shared by every style (all live in the centred bouncer now).
   const bouncerRef = useRef<HTMLDivElement>(null);
-  const auraRef = useRef<HTMLDivElement>(null);
-  // `grow` keeps the scale >= 1 (a swell, no squash) — used for the aura, which
-  // fills the screen edge-to-edge, so scaling it DOWN would reveal the
-  // background around it. The bouncer (smaller than the screen) uses the full
-  // squash-and-overshoot springy bounce.
-  const bounce = (el: HTMLElement | null, grow = false) => {
+  const bounce = (el: HTMLElement | null) => {
     if (!el) return;
     el.animate(
-      grow
-        ? [
-            { transform: "scale(1)", offset: 0 },
-            { transform: "scale(1.05)", offset: 0.4 },
-            { transform: "scale(1)", offset: 1 },
-          ]
-        : [
-            { transform: "scale(1)", offset: 0 },
-            { transform: "scale(0.93)", offset: 0.3 },
-            { transform: "scale(1.03)", offset: 0.62 },
-            { transform: "scale(1)", offset: 1 },
-          ],
+      [
+        { transform: "scale(1)", offset: 0 },
+        { transform: "scale(0.93)", offset: 0.3 },
+        { transform: "scale(1.03)", offset: 0.62 },
+        { transform: "scale(1)", offset: 1 },
+      ],
       // ease-out -> reacts instantly on tap (no slow ramp-in), settles quickly.
       { duration: 340, easing: "ease-out" }
     );
@@ -124,30 +112,20 @@ export default function Phone({
 
     // Only bounce when the tap actually lands on the active visual, not the
     // empty background around it. Each style has its own hit region.
+    const b = bouncerRef.current;
+    if (!b) return;
+    const rect = b.getBoundingClientRect();
+    const m = Math.min(rect.width, rect.height);
+    const dx = (e.clientX - (rect.left + rect.width / 2)) / m;
+    const dy = (e.clientY - (rect.top + rect.height / 2)) / m;
+    const dist = Math.hypot(dx, dy);
     let hit = false;
-    if (viz === "aura") {
-      // The aura glow pools toward the bottom of the screen.
-      const a = auraRef.current;
-      if (a) {
-        const rect = a.getBoundingClientRect();
-        hit = (e.clientY - rect.top) / rect.height > 0.6;
-      }
-    } else {
-      const b = bouncerRef.current;
-      if (b) {
-        const rect = b.getBoundingClientRect();
-        const m = Math.min(rect.width, rect.height);
-        const dx = (e.clientX - (rect.left + rect.width / 2)) / m;
-        const dy = (e.clientY - (rect.top + rect.height / 2)) / m;
-        const dist = Math.hypot(dx, dy);
-        if (viz === "orb" || viz === "glow") hit = dist < 0.32;
-        else if (viz === "ring") hit = dist < 0.46;
-        else hit = Math.abs(dy) < 0.14 && Math.abs(dx) < 0.5; // wave: the line band
-      }
-    }
+    if (viz === "orb" || viz === "glow" || viz === "sphere") hit = dist < 0.32;
+    else if (viz === "aura") hit = dist < 0.42;
+    else if (viz === "ring") hit = dist < 0.46;
+    else hit = Math.abs(dy) < 0.14 && Math.abs(dx) < 0.5; // wave: the line band
     if (!hit) return;
-    bounce(bouncerRef.current);
-    bounce(auraRef.current, true); // grow-only so the full-screen aura never clips
+    bounce(b);
   };
 
   return (
@@ -160,16 +138,6 @@ export default function Phone({
         className={`${styles.screen} ${isDesktop ? styles.screenDesktop : ""}`}
         onClick={onScreenTap}
       >
-        {/* Aura: aurora glow that hangs from the top of the screen, behind the
-            header (spans the top third). Hidden unless the Aura style is on. */}
-        <div
-          ref={auraRef}
-          className={`${styles.auraLayer} ${viz === "aura" ? styles.vizOn : ""}`}
-          aria-hidden
-        >
-          <Aura colors={colors} running={viz === "aura"} state={state} dark={dark} />
-        </div>
-
         {/* App header */}
         <header className={styles.header}>
           {showMenu ? (
@@ -212,12 +180,21 @@ export default function Phone({
             <div className={`${styles.vizLayer} ${viz === "glow" ? styles.vizOn : ""}`}>
               <Glow colors={colors} running={viz === "glow"} state={state} dark={dark} />
             </div>
+            <div className={`${styles.vizLayer} ${viz === "sphere" ? styles.vizOn : ""}`}>
+              <Sphere colors={colors} running={viz === "sphere"} state={state} dark={dark} />
+            </div>
             <div className={`${styles.vizLayer} ${viz === "ring" ? styles.vizOn : ""}`}>
               <Ring colors={colors} running={viz === "ring"} state={state} dark={dark} />
+            </div>
+            <div className={`${styles.vizLayer} ${viz === "aura" ? styles.vizOn : ""}`}>
+              <Aura colors={colors} running={viz === "aura"} state={state} dark={dark} />
             </div>
             <div className={`${styles.vizLayer} ${viz === "wave" ? styles.vizOn : ""}`}>
               <Wave colors={colors} running={viz === "wave"} state={state} dark={dark} />
             </div>
+            {/* Greeting sits just above the visual, inside the bouncer, so it
+                tracks the Size control (scales/moves with the assistant). */}
+            <p className={styles.greeting}>Hey! How can I help you</p>
           </div>
         </div>
 

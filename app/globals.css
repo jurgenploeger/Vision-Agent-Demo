@@ -79,8 +79,8 @@ body {
   background: var(--page-bg);
   color: var(--text);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
-  /* Geist stylistic alternates: ss02 = single-story (no-curve) a,
-     ss03 = alternate l, ss04 = alternate R, ss06 = alternate G. */
+  /* Geist stylistic alternates: ss02 = no-tail a, ss03 = no-tail/alt l,
+     ss04 = alt R, ss06 = alt G. */
   font-feature-settings: "ss02", "ss03", "ss04", "ss06";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;

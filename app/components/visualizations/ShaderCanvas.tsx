@@ -125,6 +125,7 @@ export default function ShaderCanvas({
       depthTest: false,
       uniforms: {
         uTime: { value: 0 },
+        uSpin: { value: 0 },
         uCol0: { value: new Vec3(...colorTarget.current.cols[0]) },
         uCol1: { value: new Vec3(...colorTarget.current.cols[1]) },
         uCol2: { value: new Vec3(...colorTarget.current.cols[2]) },
@@ -191,6 +192,11 @@ export default function ShaderCanvas({
     let curLoad = stateTarget.current.load;
     let curFlow = stateTarget.current.flow;
     let curReact = stateTarget.current.react;
+    // Separate, continuously-integrated angle for the orb's comet spin. Its speed
+    // is STRONGLY state-dependent (much slower when idle/listening, fast when
+    // thinking/speaking) — integrating it rather than multiplying uTime keeps the
+    // phase continuous, so changing state never makes the comets jump.
+    let tSpin = 0;
 
     const frame = () => {
       const now = performance.now();
@@ -211,6 +217,11 @@ export default function ShaderCanvas({
 
       // Reduced motion: keep it barely alive instead of buzzing.
       t += dt * (reduced ? 0.07 : 1.0) * curSpeed;
+      // Comet spin speed: low base (idle ~0.33) lifted mostly by react (listening
+      // ~0.7, speaking ~1.3) and flow (thinking ~1.2), plus load (connecting ~0.8)
+      // — so the comets clearly rotate slower in listening/ready than speaking.
+      const spinSpeed = 0.2 + 1.1 * curReact + 1.0 * curFlow + 0.55 * curLoad;
+      tSpin += dt * (reduced ? 0.07 : 1.0) * spinSpeed;
 
       // Lerp each colour toward its target; count eases (crossfade).
       const ct = colorTarget.current;
@@ -220,6 +231,7 @@ export default function ShaderCanvas({
       curCount += (ct.count - curCount) * 0.12;
 
       program.uniforms.uTime.value = t;
+      program.uniforms.uSpin.value = tSpin;
       program.uniforms.uCol0.value.set(...cur0);
       program.uniforms.uCol1.value.set(...cur1);
       program.uniforms.uCol2.value.set(...cur2);

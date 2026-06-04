@@ -153,15 +153,6 @@
 
 /* ---------- Aura (aurora inner-glow wrapping the screen edges) ---------- */
 
-.auraLayer {
-  position: absolute;
-  inset: 0; /* full screen so the glow can hug the top + side edges */
-  z-index: 0;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-}
-
 /* ---------- Header ---------- */
 
 .header {
@@ -198,6 +189,30 @@
   font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--muted);
+}
+
+/* Greeting prompt — lives INSIDE the bouncer, pinned just above the visible
+   visual, so it sits close to the assistant and moves/scales with the Size
+   control. (bottom % is measured from the bouncer, which scales with size.) */
+.greeting {
+  position: absolute;
+  /* Centre on the bouncer's midpoint (not left:0;right:0) so that when the
+     nowrap text is wider than a small bouncer it overflows BOTH sides evenly and
+     stays screen-centred, instead of clamping at the left and drifting right. */
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 86%; /* clears the visual's top with margin (Ring fans out highest) */
+  z-index: 1; /* above the shader layers */
+  margin: 0;
+  padding: 0;
+  text-align: center;
+  white-space: nowrap; /* always one line, even at the smallest size */
+  font-family: var(--font-display), sans-serif;
+  font-size: 19px;
+  font-weight: 400; /* regular weight */
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
 
 .statusDot {

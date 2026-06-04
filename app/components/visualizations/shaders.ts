@@ -19,6 +19,8 @@ void main() {
 const HEADER = /* glsl */ `
 precision highp float;
 uniform float uTime;
+uniform float uSpin;       // orb comet-spin angle: integrated with a STRONGLY
+                           // state-dependent speed (slow when idle/listening)
 uniform vec3  uCol0;       // colour 1 as HSV: (hue 0-1, sat 0-1, val 0-1)
 uniform vec2  uResolution; // drawing-buffer pixels
 // Conversational-state drivers (lerped on the JS side). See states.ts.
@@ -154,148 +156,75 @@ vec2 coords() {
 `;
 
 /* ------------------------------------------------------------------ */
-/* ORB — fixed circle, domain-warped flowing interior ("Siri flow").   */
-/* The silhouette never moves; all motion happens inside the disc.     */
+/* ORB — a FLAT disc filled with a flowing liquid colour gradient. No   */
+/* 3D shading, specular or rim glow: big soft colour masses domain-warp */
+/* and drift inside the circle (mesh-gradient / shaders.com look).      */
 /* ------------------------------------------------------------------ */
 export const ORB_FRAGMENT = HEADER + SNOISE + COORDS + /* glsl */ `
 void main() {
   vec2 q = coords();
   float t = uTime;
   float r = length(q);
+  float speech = uReact * speechEnv(t);   // 0..~1 while speaking, ~0 in pauses
 
-  // FIXED, perfect circle of CONSTANT size — the orb itself never pulses or
-  // scales (in any state). All life happens in the liquid interior below.
-  float breath = 0.5 + 0.5 * sin(t * (TAU / 3.6)); // used only for the halo
-  // Shared "speech" envelope (layered simplex noise, irregular/non-looping).
-  // It drives BOTH the size pulse and the interior mesh below, so the gradients
-  // surge in rhythm with the talking instead of churning at a steady rate.
-  // Speech activity with natural pauses (shared envelope). Swells the orb on
-  // speech bursts and rests it during pauses, rather than a constant pulse.
-  float speech = uReact * speechEnv(t); // 0 .. ~1 while speaking, ~0 in pauses
-  float R = 0.24 * (1.0 + speech * 0.10);
+  // Flat disc with a gentle size pulse on speech. Slightly soft edge (not a hard
+  // cut) + a faint halo so the circle melts a touch into the background.
+  float R = 0.24 * (1.0 + 0.05 * speech);
   float aa = 1.6 / min(uResolution.x, uResolution.y);
-  float circle = 1.0 - smoothstep(R - aa, R + aa, r);
+  float circle = 1.0 - smoothstep(R - aa, R + 0.005 + aa, r);
 
-  // Interior coordinates normalized to the unit disc.
-  vec2 p = q / R;
+  vec2 p = q / R;                          // unit-disc coordinates
 
-  // --- Soft colored fog: ONE low-frequency, large-scale noise nudge only ---
-  // No fbm, no octave stacking. Low frequency + small amplitude keeps the
-  // masses big and smooth (no veins, filaments or marble). The interior is
-  // always in gentle liquid motion. State is conveyed purely by MOTION SPEED &
-  // AMPLITUDE (which lerp smoothly) — no rotation, so switching never spins.
-  // Always-on gentle liquid drift; speaking runs it at a natural pace.
-  // The interior churn SPEED comes entirely from uTime's rate (lerped per-state
-  // on the JS side), so the noise clock uses a FIXED coefficient. Multiplying
-  // the accumulated uTime by a lerping per-state factor would make the phase
-  // JUMP on a state change — that's what made the interior spin up suddenly.
-  // Speech still adds AMPLITUDE (nAmp) below; it just doesn't add extra speed.
-  float nt = t * 0.09;
-  // The mesh warps harder on speech peaks (in sync with the size pulse).
-  float nAmp = 0.16 + 0.18 * uReact + 0.14 * speech;
-  vec2 sp = p + nAmp * vec2(snoise(vec3(p * 0.6, nt)),
-                            snoise(vec3(p * 0.6 + 4.7, nt)));
-  // A circular wave rippling out from the centre, displacing TANGENTIALLY so the
-  // interior swirls in concentric waves — liquid sloshing inside the orb.
-  float ang = atan(p.y, p.x);
-  float wave = (0.05 + 0.05 * speech) * sin(length(p) * 6.0 - nt * 4.0);
-  sp += wave * vec2(-sin(ang), cos(ang));
+  // --- FLOWING LIQUID GRADIENT (flat). Domain-warp the coords with slow, low-
+  // frequency noise so big colour masses fold and drift inside the disc, then
+  // blend the palette by smooth overlapping noise fields (soft organic blobs, not
+  // bands). uTime carries the per-state speed; speech only adds AMPLITUDE so the
+  // flow surges while talking rather than spinning up. ---
+  float ct = t * 0.13;
+  float amp = 0.40 + 0.20 * speech;
+  vec2 w1 = vec2(snoise(vec3(p * 0.65, ct)),
+                 snoise(vec3(p * 0.65 + 11.0, ct)));
+  vec2 sp = p + amp * w1;
+  // A GENTLE second warp only — low frequency + small amplitude keeps the masses
+  // big and sleek (just a couple of smooth folds, not fine detail).
+  vec2 w2 = vec2(snoise(vec3(sp * 0.85 + 3.0, ct * 0.8)),
+                 snoise(vec3(sp * 0.85 + 21.0, ct * 0.8)));
+  sp += 0.14 * w2;
 
-  // --- 2-3 big, soft colour clouds that CIRCULATE around the interior on their
-  // own orbits (counter-rotating, with noise on angle + radius) so the masses
-  // revolve like liquid swirling inside the orb. The radii stay bounded so the
-  // (large) blobs always overlap into one connected shape — never a gap. The
-  // base angular rate uses uTime directly (which already carries the per-state
-  // speed), so speaking swirls faster without a phase jump on state change. ---
-  float edge = 0.5;
-  float bt = t;
-  float a0 =  bt * 0.55 + 2.2 * snoise(vec3(bt * 0.13, 0.0, 0.0));
-  float a1 = -bt * 0.44 + 2.2 * snoise(vec3(bt * 0.11, 5.0, 0.0)) + 2.0;
-  float a2 =  bt * 0.34 + 2.2 * snoise(vec3(bt * 0.09, 9.0, 0.0)) + 4.0;
-  float rad0 = edge * (0.42 + 0.36 * (0.5 + 0.5 * snoise(vec3(bt * 0.20, 1.0, 0.0))));
-  float rad1 = edge * (0.40 + 0.38 * (0.5 + 0.5 * snoise(vec3(bt * 0.17, 2.0, 0.0))));
-  float rad2 = edge * (0.38 + 0.32 * (0.5 + 0.5 * snoise(vec3(bt * 0.14, 4.0, 0.0))));
-  vec2 c0 = rad0 * vec2(cos(a0), sin(a0));
-  vec2 c1 = rad1 * vec2(cos(a1), sin(a1));
-  vec2 c2 = rad2 * vec2(cos(a2), sin(a2));
-  // Tighter falloffs so the clouds read as distinct, defined colour zones (a
-  // mesh gradient) rather than melting into one uniform blur — still soft.
-  float b0 = smoothstep(1.05, 0.1, length(sp - c0));
-  float b1 = smoothstep(1.35, 0.1, length(sp - c1));
-  float b2 = smoothstep(1.32, 0.1, length(sp - c2));
+  // Palette. A single colour falls back to a brighter + a deeper SHADE of itself
+  // (so a mono orb still has a flowing gradient), crossfading to the real colours
+  // 2/3 as they activate.
+  float g1 = clamp(uCount - 1.0, 0.0, 1.0);
+  float g2 = clamp(uCount - 2.0, 0.0, 1.0);
+  vec3 cA = vivid(uCol0);
+  vec3 kL = clamp(vivid(uCol0) * 1.30, 0.0, 1.0);
+  vec3 kD = vivid(uCol0) * 0.74;
+  vec3 cB = mix(kL, vivid(uCol1), g1);
+  vec3 cC = mix(kD, vivid(uCol2), g2);
 
-  // One drifting "light source" spot — the orb is most transparent here, so the
-  // background shines through more (a glowing window; reads as depth on dark).
-  // Measured from the UN-warped coordinate so it stays a single coherent blob
-  // (the noise warp can't fold it into multiple lobes). Large, drifting softly.
-  vec2 lc = 0.22 * vec2(sin(t * 0.085 + 1.3), cos(t * 0.1 + 0.5));
-  float lightSpot = smoothstep(1.7, 0.1, length(p - lc));
+  // Smooth, overlapping colour fields -> soft blends.
+  float f0 = snoise(vec3(sp * 0.5 + 1.0, ct));
+  float f1 = snoise(vec3(sp * 0.5 + 8.0, ct * 0.9 + 4.0));
+  vec3 col = cA;
+  col = mix(col, cB, smoothstep(-0.4, 0.7, f0));
+  col = mix(col, cC, smoothstep(-0.3, 0.8, f1));
 
-  // Palette: harmonic offsets from one hue. Kept saturated so the interior
-  // colour reads pronounced even through the translucent body.
-  // Up to three user-chosen colours; colours 2 and 3 crossfade in as uCount
-  // rises (lerped), so adding/removing a colour is smooth.
-  // Dark mode pushes saturation higher so the orb reads as vivid/neon over the
-  // dark backdrop instead of muted/muddy. Light mode is unchanged.
-  float satK = mix(1.85, 2.35, uDark);
-  vec3 k0 = saturate3(vivid(uCol0),  satK);
-  vec3 k1 = saturate3(vivid(uCol1), satK);
-  vec3 k2 = saturate3(vivid(uCol2), satK);
-  // SINGLE-colour fallback: rather than every cloud being the IDENTICAL hue (so
-  // the interior barely moves), the 2nd/3rd clouds become a brighter and a
-  // deeper SHADE of that one hue — so a mono orb still shows light and deep
-  // masses circulating inside. These crossfade to the real colours 2/3 as those
-  // activate, so the multi-colour look is unchanged.
-  vec3 kLight = saturate3(clamp(vivid(uCol0) * 1.20, 0.0, 1.0), mix(1.4, 1.8, uDark));
-  vec3 kDeep  = saturate3(vivid(uCol0) * 0.62, mix(1.5, 1.95, uDark));
-  vec3 colA = k0;
-  vec3 colB = mix(kLight, k1, clamp(uCount - 1.0, 0.0, 1.0));
-  vec3 colC = mix(kDeep,  k2, clamp(uCount - 2.0, 0.0, 1.0));
-  // Base fills the gaps between clouds — kept saturated so the mesh stays vivid;
-  // less white mixed in on dark so the colour stays neon rather than washing out.
-  vec3 base = saturate3(mix(vivid(uCol0), vec3(1.0), mix(0.08, 0.03, uDark)), mix(1.4, 1.8, uDark));
+  // A single broad, soft sheen sweep (not busy ribbons) — keeps it sleek.
+  float sheen = smoothstep(0.55, 0.95, snoise(vec3(sp * 0.55 + 30.0, ct)));
+  col = mix(col, vec3(1.0), 0.32 * sheen);
 
-  vec3 col = base;
-  col = mix(col, colA, b0);
-  col = mix(col, colB, b1);
-  col = mix(col, colC, b2);
-  // Bright luminous core of the light source — a prominent highlight.
-  col += lightSpot * 0.2 * mix(vec3(1.0), colA, 0.3);
+  col = saturate3(col, 1.12);
+  col = desat(col, uSat);                  // thinking desaturates
+  // Light mode: deepen a touch so the saturated gradient isn't too bright on white.
+  col *= mix(0.86, 1.0, uDark);
 
-  // --- Glassy shading (sells the 3D volume) ---
-  float z = sqrt(max(R * R - r * r, 0.0));
-  vec3 nrm = normalize(vec3(q, z + 1e-4));
-  vec3 L = normalize(vec3(-0.32, 0.5, 0.8));
-  // very gentle volumetric shading — kept light so it reads lit-from-within
-  col *= 0.92 + 0.08 * clamp(dot(nrm, L), 0.0, 1.0);
-  // brighter specular near the top — a defined glassy highlight
-  float spec = pow(clamp(dot(nrm, L), 0.0, 1.0), 3.5);
-  col += spec * (0.22 + 0.12 * uLevel);
-  // Soft Fresnel rim — gentle and colour-tinted so the edge blends rather than
-  // ringing the orb with a bright line.
-  float fres = pow(1.0 - clamp(nrm.z, 0.0, 1.0), 3.0);
-  col += fres * 0.22 * mix(vec3(1.0), colA, 0.65);
-
-  // Colour stays consistent across states — states differ by MOTION, not hue.
-
-  // --- Composite: TRANSLUCENT glassy body over a soft halo ---
-  // The body lets the background show through (more see-through in the centre,
-  // a more opaque glassy rim), so dark mode reveals the dark backdrop.
-  vec3 haloCol = mix(mix(vivid(uCol0), vec3(1.0), 0.78),
-                     mix(vivid(uCol0), vec3(1.0), 0.30), uDark);
-  // Lower opacity + wider, softer falloff so the border glow melts into the bg.
-  float halo = exp(-pow(max(r - R, 0.0) / 0.075, 2.0));
-  float haloAmp = mix(0.07, 0.14, uDark) + 0.08 * uReact;
-  float haloA = halo * haloAmp * (0.85 + 0.15 * breath) * (1.0 - circle);
-
-  // See-through core, glassy rim — and the light-source spot is the MOST
-  // transparent, so the background shines through there.
-  float bodyA = circle * (0.7 + 0.3 * fres) * (1.0 - 0.66 * lightSpot);
-
-  // Connecting pulses its opacity ("not ready yet") without fully vanishing.
-  float fade = mix(1.0, 0.45 + 0.35 * sin(t * 2.0), uLoad);
-
-  // Source-over (premultiplied): translucent body in front of the halo.
+  // Composite: flat opaque disc, plus a faint soft halo at the rim. Connecting
+  // breathes the opacity ("not ready yet").
+  float fade = mix(1.0, 0.5 + 0.4 * sin(t * 2.0), uLoad);
+  float halo = exp(-pow(max(r - R, 0.0) / 0.06, 2.0)) * (1.0 - circle);
+  vec3 haloCol = mix(mix(cA, vec3(1.0), 0.5), cA, uDark);
+  float haloA = halo * (mix(0.05, 0.10, uDark) + 0.05 * uReact);
+  float bodyA = circle;
   vec3 pm = col * bodyA + haloCol * haloA * (1.0 - bodyA);
   float a = bodyA + haloA * (1.0 - bodyA);
   float g = uBright * fade;
@@ -349,7 +278,9 @@ void main() {
 
   vec3 k0   = saturate3(vivid(uCol0), 1.7);
   vec3 kL   = saturate3(clamp(vivid(uCol0) * 1.18, 0.0, 1.0), 1.3);
-  vec3 kD   = saturate3(vivid(uCol0) * 0.62, 1.4);
+  // "Deep" shade kept only mildly darker (was 0.62) so the 1-/2-colour fallback
+  // mass doesn't drag the glow dark.
+  vec3 kD   = saturate3(vivid(uCol0) * 0.85, 1.3);
   vec3 colB = mix(kL, saturate3(vivid(uCol1), 1.7), clamp(uCount - 1.0, 0.0, 1.0));
   vec3 colC = mix(kD, saturate3(vivid(uCol2), 1.7), clamp(uCount - 2.0, 0.0, 1.0));
   vec3 base = saturate3(mix(vivid(uCol0), vec3(1.0), 0.06), 1.3);
@@ -357,6 +288,10 @@ void main() {
   col = mix(col, k0,   b0);
   col = mix(col, colB, b1);
   col = mix(col, colC, b0 * 0.5);
+  // Mixing different hues averages toward a muddy, darker midpoint; push the
+  // saturation + value back up so multi-colour glows stay bright and vivid.
+  col = saturate3(col, 1.15);
+  col = clamp(col * 1.12, 0.0, 1.0);
   col = desat(col, uSat);
 
   // Soft 3D globe shading (lit upper-left), gentle so the edge stays soft.
@@ -365,7 +300,7 @@ void main() {
   vec3 nrm = normalize(vec3(q / R, z + 1e-4));
   vec3 Ld = normalize(vec3(-0.35, 0.45, 0.85));
   float diff = clamp(dot(nrm, Ld), 0.0, 1.0);
-  col *= 0.66 + 0.34 * diff;
+  col *= 0.80 + 0.20 * diff; // higher floor so shading doesn't darken the colours
   float fres = pow(1.0 - clamp(nrm.z, 0.0, 1.0), 2.5);
   col += fres * 0.10 * mix(vec3(1.0), k0, 0.6); // faint, soft rim tint
 
@@ -383,6 +318,119 @@ void main() {
   float al = bodyA + haloA * (1.0 - bodyA);
   float g = uBright * fade;
   gl_FragColor = vec4(pm * g, al * g);
+}
+`;
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* SPHERE — a glossy liquid orb: a fixed circle bump-mapped with flowing  */
+/* longitudinal ripples, lit with a sharp specular so silky highlight     */
+/* streaks slide over deep, draped folds (iOS "liquid glass"). The folds  */
+/* flow + deepen while speaking.                                          */
+/* ------------------------------------------------------------------ */
+export const SPHERE_FRAGMENT = HEADER + SNOISE + COORDS + /* glsl */ `
+void main() {
+  vec2 q = coords();
+  float t = uTime;
+  float r = length(q);
+  float speech = uReact * speechEnv(t);
+  // State energy: idle/ready sits low (calm, near-still ripples); listening,
+  // thinking and connecting each lift it via their own driver; speaking peaks.
+  // Drives ripple amplitude + silhouette wobble so every state reads distinct.
+  float energy = 0.32 + 0.40 * uReact + 0.42 * uFlow + 0.26 * uLoad + 0.55 * speech;
+
+  // Ripple the silhouette too: the folds reach the edge, so the circle wobbles
+  // (more while active) instead of being perfectly round.
+  float ea = atan(q.y, q.x);
+  float rt = t * 0.3;
+  float edge = 0.40 * sin(ea * 5.0 + rt)
+             + 0.32 * sin(ea * 8.0 - rt * 1.3 + 1.0)
+             + 0.50 * snoise(vec3(cos(ea) * 1.2, sin(ea) * 1.2, rt * 0.6));
+  float R = 0.245 * (1.0 + (0.018 + 0.055 * energy) * edge);
+  float aa = 1.6 / min(uResolution.x, uResolution.y);
+  float circle = 1.0 - smoothstep(R - aa, R + aa, r);
+  if (circle <= 0.0) { gl_FragColor = vec4(0.0); return; }
+
+  // Unit-sphere normal (front-facing hemisphere).
+  vec2 p = q / R;
+  float z = sqrt(max(1.0 - dot(p, p), 0.0));
+  vec3 n = vec3(p, z);
+
+  // Vertical meridian folds (ripples) that travel LEFT -> RIGHT, so the sphere
+  // reads like a globe spinning on its vertical axis: the fold front is a
+  // vertical line sweeping across. uTime carries the per-state speed.
+  float nt = t * 0.22;
+  float rot = t * 0.5;                                 // globe spin (left -> right)
+  vec2 wc = p * 1.4 - vec2(rot * 0.30, 0.0);           // noise drifts with the spin
+  float w0n = snoise(vec3(wc, nt));
+  float w1n = snoise(vec3(wc + 5.0, nt));
+  float sx = p.x + 0.10 * w0n;                         // mostly-x surface coord (slight warp)
+  float A = sx * 7.0 - rot;
+  float B = sx * 13.0 - rot * 1.8;
+  // Analytic gradient: folds vary in x only (dh/dy ~ 0) so the ripple stays a
+  // vertical line; the noise adds a little organic perturbation.
+  vec2 grad = vec2(7.0 * cos(A) + 6.5 * cos(B), 0.0);
+  grad += 1.8 * vec2(w0n, w1n);
+  float bump = (0.045 + 0.075 * energy) * (0.55 + 0.45 * z); // ripple depth tracks state
+  vec3 N = normalize(n - vec3(grad * bump, 0.0));
+
+  // Lighting from the upper-right (sharp specular -> silky streaks).
+  vec3 L = normalize(vec3(0.42, 0.34, 0.84));
+  vec3 V = vec3(0.0, 0.0, 1.0);
+  vec3 Hh = normalize(L + V);
+  float diff = clamp(dot(N, L), 0.0, 1.0);
+  float spec = pow(clamp(dot(N, Hh), 0.0, 1.0), 46.0);
+  float sheen = pow(clamp(dot(N, Hh), 0.0, 1.0), 9.0);
+  float fres = pow(1.0 - clamp(N.z, 0.0, 1.0), 2.6);
+
+  // Colour: a RANDOM gradient that drifts across the surface, sweeping L->R with
+  // the globe spin — like the Glow's moving colour masses, not regular longitude
+  // bands. Big soft noise blobs of each colour over a colour-0 base (so a single
+  // colour sphere is never black; it just circulates light/deep shades of itself,
+  // exactly like the Glow). Adding a colour mixes its mass into the gradient.
+  float g1 = clamp(uCount - 1.0, 0.0, 1.0);
+  float g2 = clamp(uCount - 2.0, 0.0, 1.0);
+  vec3 k0   = saturate3(vivid(uCol0), 1.25);
+  vec3 kL   = saturate3(clamp(vivid(uCol0) * 1.18, 0.0, 1.0), 1.2);
+  vec3 kD   = saturate3(vivid(uCol0) * 0.85, 1.2);
+  vec3 colB = mix(kL, saturate3(vivid(uCol1), 1.25), g1);
+  vec3 colC = mix(kD, saturate3(vivid(uCol2), 1.25), g2);
+  float drift = rot * 0.5;                              // sweeps with the globe spin
+  // LOW-frequency field + VERY WIDE smoothstep = big, soft gradient blurs that
+  // melt into each other (not small spotted blobs).
+  vec2 fp = vec2(sx * 0.85 - drift, p.y * 0.8);         // surface field coord (large masses)
+  float bb0 = smoothstep(-0.65, 0.75, snoise(vec3(fp, rot * 0.10 + 2.0)));
+  float bb1 = smoothstep(-0.45, 0.85, snoise(vec3(fp * 0.8 + 8.0, rot * 0.08 - 1.0)));
+  vec3 hue = k0;
+  hue = mix(hue, colB, bb0);
+  hue = mix(hue, colC, bb1);
+  hue = saturate3(hue, 1.2);
+
+  vec3 light = mix(hue, vec3(1.0), 0.8);
+  // DARK mode: a vivid hue body with a deep-but-coloured shadow side; the gloss is
+  // the bright WHITE specular streaks (which pop against the dark screen).
+  vec3 colDark = hue * (0.5 + 0.5 * diff);
+  // LIGHT mode: WHITE flows across the sphere — over the white screen the gloss
+  // must read as LIGHTNESS, not a dark tint. A light colour base, with the lit
+  // ripple crests + broad sheen blending toward white; the troughs keep the
+  // colour so the silhouette stays defined.
+  vec3 colLight = mix(hue, vec3(1.0), 0.32) * (0.74 + 0.26 * diff);
+  colLight = mix(colLight, vec3(1.0), clamp(0.5 * pow(diff, 1.6) + 0.55 * sheen, 0.0, 0.9));
+  vec3 col = mix(colLight, colDark, uDark);
+  col += light * spec * 1.2;     // sharp silky streaks
+  col += hue * sheen * 0.4;      // broad sheen
+  col += hue * fres * 0.55;      // rim glow
+  col = desat(col, uSat);
+
+  // Opacity: mostly solid so the (dark) background can't bleed through the shadow
+  // side as black. Light mode stays a touch more translucent so it sits softly on
+  // the white screen; highlights + rim push it fully opaque.
+  float lum = dot(clamp(col, 0.0, 1.0), vec3(0.299, 0.587, 0.114));
+  // Connecting: a slow opacity breath so the state reads as "waking up".
+  float pulse = mix(1.0, 0.62 + 0.38 * sin(t * 1.9), uLoad);
+  float aFloor = mix(0.6, 0.82, uDark);
+  float a = circle * uBright * pulse * clamp(aFloor + 0.3 * lum + 0.5 * spec + 0.2 * fres, 0.0, 1.0);
+  gl_FragColor = vec4(col * a, a);
 }
 `;
 
@@ -567,85 +615,92 @@ void main() {
 `;
 
 /* ------------------------------------------------------------------ */
-/* AURA — a soft gradient glow that pools at the BOTTOM of the screen   */
-/* and climbs both sides in a U, thinning toward the top. Smooth and    */
-/* blurry (no sharp curtains); it swells and pulses while speaking.     */
+/* AURA — several glowing strands woven into a wave-packet: they swell  */
+/* and entangle in the centre, flatten toward the edges, and brighten   */
+/* to white where they cross. Two strands per active colour, so more    */
+/* colours = more entangled lines. Flows + waves more while speaking.   */
 /* ------------------------------------------------------------------ */
-export const AURA_FRAGMENT = HEADER + SNOISE + /* glsl */ `
-void main() {
-  // Full-screen 0..1 coords (y = 1 top, 0 bottom).
-  vec2 uv = gl_FragCoord.xy / uResolution.xy;
-  float t = uTime;
+export const AURA_FRAGMENT = HEADER + SNOISE + COORDS + /* glsl */ `
+// Soft glowing strand at y = yc(x), with a DEPTH that oscillates along x + time
+// so strands pass over and under each other (woven ribbons). Compositing is
+// depth-weighted: where strands overlap, the frontmost (highest z) wins, so one
+// line rolls over the other instead of the colours just adding.
+void addStrand(inout vec3 colNum, inout float wDen, inout float covMax, inout float covSum,
+               float qy, float x, float t, float env, float amp,
+               float ph, float fr, float sp, vec3 c, float gate) {
+  // Travelling phase (x*fr - t*sp): the waves move LEFT -> RIGHT, like the Wave.
+  float yc = env * amp * (0.72 * sin(x * fr - t * sp + ph)
+                        + 0.28 * sin(x * fr * 1.6 - t * sp * 1.3 + ph * 1.7));
+  yc += env * amp * 0.6 * sin(t * 0.5 + ph * 2.0); // drift scales with amp: flat when calm, woven when active
+  float d = abs(qy - yc);
+  float thick = 0.020;
+  float g = exp(-(d * d) / (thick * thick)) * gate;
+  float z = sin(x * fr * 0.6 - t * sp * 1.0 + ph * 1.3); // depth travels right too
+  // Depth biases which strand shows on top (rolls over), but stays BOUNDED so a
+  // faint tail can't override a bright line's colour (that caused odd overlaps).
+  float depth = 0.5 + 0.5 * z;                          // 0..1
+  // Brightness varies with depth: a strand in FRONT reads brighter than one
+  // behind it, so even a single colour shows lights + darks as the lines roll.
+  vec3 cc = c * (0.55 + 0.7 * depth);
+  float w = g * (0.22 + 0.78 * depth);                  // coverage-primary front/back
+  colNum += cc * w;
+  wDen += w;
+  covMax = max(covMax, g);
+  covSum += g;                                          // total coverage -> overlap bloom
+}
 
-  // Speech activity with natural pauses (shared envelope): swells while speaking
-  // (uReact ~1), gentle while listening (~0.45), and ebbs into pauses.
+void main() {
+  vec2 q = coords();
+  float t = uTime;
+  float x = q.x;
   float speech = uReact * speechEnv(t);
 
-  // --- fluid motion: domain-warp the sampling position with slow flowing noise
-  // so the oval undulates and morphs like liquid. uTime already integrates the
-  // per-state speed (lerped in JS), so use a FIXED rate here — multiplying
-  // accumulated time by a changing factor would make the phase JUMP on a state
-  // change (glitchy). ---
-  float slow = t * 0.13;
-  vec2 warp = vec2(
-    snoise(vec3(uv.x * 1.3, uv.y * 1.1 - slow, slow * 0.7)),
-    snoise(vec3(uv.x * 1.3 + 5.0, uv.y * 1.1 + slow * 0.9, slow * 0.8 + 2.0))
-  );
-  vec2 p = uv + warp * (0.06 + 0.14 * uReact); // subtle at rest; flows more while speaking
+  // Wave-packet envelope: the strands swell + entangle in the centre and flatten
+  // toward the edges. Speaking widens + lifts the packet.
+  float sigma = 0.22 + 0.05 * speech;
+  float env = exp(-pow(x / sigma, 2.0));
+  // State-driven amplitude, like the Wave: calm + low when idle/ready, a clear
+  // ripple while listening/thinking, and a full entangled swell when speaking.
+  float amp = 0.05 + 0.07 * uReact + 0.07 * uFlow + 0.05 * uLoad + 0.28 * speech;
 
-  // Soft flowing field (sampled in the warped space) for gentle intensity drift.
-  // Low frequencies only + a flatter remap so the glow stays an even, soft bloom
-  // rather than throwing bright sparks/hotspots.
-  float field = 0.72 * snoise(vec3(p.x * 0.8, p.y * 0.7 - slow, slow * 0.6))
-              + 0.28 * snoise(vec3(p.x * 1.2 + 3.0, p.y * 1.0 + slow, slow + 2.0));
-  field = field * 0.5 + 0.5;
-  field = mix(0.66, field, 0.45);   // strongly flattened -> near-uniform glow
-
-  // --- a soft bloom rising from the bottom edge: brightest low, fading up into
-  // the dark (like Google's "Neural Expressive" UI). Kept SHORT, and a touch
-  // taller at the left/right edges than in the middle so the top contour dips —
-  // a slight U. Sampled in the WARPED space so it flows fluidly. ---
-  float ex = clamp(abs(p.x - 0.5) * 2.0, 0.0, 1.0);          // 0 centre -> 1 at sides
-  float reachY = mix(0.17, 0.25, smoothstep(0.15, 1.0, ex)); // low + flatter: ~1/4 screen max
-  reachY *= 1.0 + 0.08 * speech;                             // gentle swell on speech peaks
-  float mask = clamp(1.0 - smoothstep(0.0, reachY, p.y), 0.0, 1.0); // bright bottom -> fade up
-
-  // Soft glow, modulated by the flowing field; breathes, swells with speech.
-  float breath = 0.94 + 0.06 * sin(t * 0.5);
-  float glow = clamp(mask * (0.84 + 0.16 * field) * breath, 0.0, 1.0);
-
-  // --- palette: three colours whose AMOUNTS breathe over time. Instead of a
-  // fixed left/centre/right split, each colour is a broad, soft band whose
-  // centre slowly drifts (low-rate sines), so the proportion of each colour on
-  // screen ebbs and flows. Sampled in the flowing (warped) space so the bands
-  // aren't straight lines. Bands gate in/out with uCount, so 1 or 2 colours
-  // degrade gracefully (and collapse to one hue when only one is active). ---
+  float g1 = clamp(uCount - 1.0, 0.0, 1.0);
+  float g2 = clamp(uCount - 2.0, 0.0, 1.0);
   vec3 c0 = vivid(uCol0);
-  vec3 c1 = vivid(uCol1);
-  vec3 c2 = vivid(uCol2);
-  // Drifting band centres -> the visible amount of each colour changes in time.
-  float m0 = 0.18 + 0.12 * sin(t * 0.11);
-  float m1 = 0.50 + 0.13 * sin(t * 0.09 + 2.1);
-  float m2 = 0.82 + 0.12 * sin(t * 0.13 + 4.2);
-  // Palette coordinate flows with the liquid field (organic, not a hard line).
-  float gx = clamp(p.x + 0.12 * (field - 0.5), 0.0, 1.0);
-  float w0 = exp(-pow((gx - m0) / 0.34, 2.0));
-  float w1 = exp(-pow((gx - m1) / 0.34, 2.0)) * clamp(uCount - 1.0, 0.0, 1.0);
-  float w2 = exp(-pow((gx - m2) / 0.34, 2.0)) * clamp(uCount - 2.0, 0.0, 1.0);
-  float wsum = w0 + w1 + w2 + 1e-4;
-  vec3 col = (c0 * w0 + c1 * w1 + c2 * w2) / wsum;
-  // The weighted blend of differing hues averages toward grey in overlap zones,
-  // so push saturation back up to keep the colours vivid.
-  col = saturate3(col, 1.3);
+  // ALWAYS six strands regardless of colour count: inactive colour slots collapse
+  // to the active palette (lines never disappear, only recolour). Slots 2/3
+  // become colours 2/3 as they activate, else fall back to colour 1.
+  vec3 c1 = mix(c0, vivid(uCol1), g1);
+  vec3 c2 = mix(c0, vivid(uCol2), g2);
 
+  // Six strands (different phase/frequency/speed so they weave + roll). Two
+  // strands per colour slot so the picked colours read clearly — no lightened
+  // companions (those looked washed out); every line keeps its chosen hue.
+  vec3 colNum = vec3(0.0);
+  float wDen = 0.0;
+  float covMax = 0.0;
+  float covSum = 0.0;
+  addStrand(colNum, wDen, covMax, covSum, q.y, x, t, env, amp, 0.0, 13.0, 1.00, c0, 1.0);
+  addStrand(colNum, wDen, covMax, covSum, q.y, x, t, env, amp, 1.3, 15.5, 1.22, c0, 1.0);
+  addStrand(colNum, wDen, covMax, covSum, q.y, x, t, env, amp, 2.6, 12.0, 0.92, c1, 1.0);
+  addStrand(colNum, wDen, covMax, covSum, q.y, x, t, env, amp, 3.9, 16.5, 1.12, c1, 1.0);
+  addStrand(colNum, wDen, covMax, covSum, q.y, x, t, env, amp, 5.2, 14.0, 1.05, c2, 1.0);
+  addStrand(colNum, wDen, covMax, covSum, q.y, x, t, env, amp, 0.7, 17.0, 1.30, c2, 1.0);
+
+  // Frontmost strand's colour (depth-weighted) at each pixel.
+  vec3 col = colNum / max(wDen, 1e-4);
+  // Bright CROSSINGS: where strands overlap (coverage beyond the single top
+  // strand), the colour blooms brighter and washes a little toward white — so the
+  // weave shows interesting, luminous intersections even with one colour.
+  float overlap = clamp(covSum - covMax, 0.0, 1.5);
+  col *= 1.0 + 0.55 * overlap;
+  col = mix(col, vec3(1.0), 0.16 * clamp(overlap, 0.0, 1.0));
+  col = saturate3(col, 1.1);
   col = desat(col, uSat);
 
-  // Speaking swells + pulses the glow; level lifts presence. Kept a touch
-  // dimmer overall so the aura reads as a soft bloom, not a bright wash.
-  float pulse = 1.0 + 0.65 * speech;
-  float a = clamp(glow * (0.78 + 0.32 * uLevel) * pulse, 0.0, 0.82) * uBright;
-  a = clamp(a, 0.0, 1.0);
-
+  // Fade toward the left/right edges so the strands dissolve into the background.
+  float edgeFade = smoothstep(0.5, 0.28, abs(x));
+  float scale = (0.95 + 0.4 * speech) * uBright * edgeFade;
+  float a = clamp(covMax * scale, 0.0, 1.0);
   gl_FragColor = vec4(col * a, a);
 }
 `;

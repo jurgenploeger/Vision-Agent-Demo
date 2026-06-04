@@ -10,8 +10,9 @@ import { type Color, hsvToHex } from "./color";
 import ColorPickerOverlay from "./ColorPicker";
 
 const TABS: { id: Viz; label: string }[] = [
-  { id: "orb", label: "Orb" },
   { id: "glow", label: "Glow" },
+  { id: "orb", label: "Orb" },
+  { id: "sphere", label: "Sphere" },
   { id: "ring", label: "Ring" },
   { id: "aura", label: "Aura" },
   { id: "wave", label: "Wave" },
