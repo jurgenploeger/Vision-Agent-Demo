@@ -1,0 +1,224 @@
+/* Color picker: a hue wheel + saturation/value square, hex input, and preset
+   swatches. Shown in a popover on desktop and a stacked iOS-style sheet on
+   mobile. Hand-built (no colour-picker dependency) to match the project chrome. */
+
+/* ---- Wheel ---- */
+.wheel {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin: 0 auto;
+  touch-action: none; /* we drive it with pointer events */
+  user-select: none;
+}
+.ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* hue 0 (red) sits at the east point; hue increases clockwise. */
+  background: conic-gradient(
+    from 90deg,
+    #ff0000,
+    #ffff00,
+    #00ff00,
+    #00ffff,
+    #0000ff,
+    #ff00ff,
+    #ff0000
+  );
+  /* punch out the centre so only the ring band shows */
+  -webkit-mask: radial-gradient(
+    circle at center,
+    transparent 0 73px,
+    #000 73px
+  );
+  mask: radial-gradient(circle at center, transparent 0 73px, #000 73px);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.12),
+    0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+.square {
+  position: absolute;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+}
+/* draggable thumbs */
+.thumb {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 2px solid #fff;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 1px 3px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+/* ---- Hex row ---- */
+.hexRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.hexPreview {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  flex: 0 0 auto;
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+.hexField {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--field-bg);
+  box-shadow: inset 0 0 0 1px var(--control-edge);
+}
+.hexHash {
+  color: var(--muted);
+  font-size: 13px;
+}
+.hexInput {
+  flex: 1 1 auto;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  outline: none;
+}
+
+/* ---- Presets ---- */
+.presetsLabel {
+  margin: 16px 0 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.presets {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+.preset {
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: inset 0 0 0 1px var(--edge);
+  transition: transform 0.12s ease;
+}
+.preset:hover {
+  transform: scale(1.08);
+}
+.presetActive {
+  box-shadow:
+    0 0 0 2px var(--device-bg),
+    0 0 0 4px var(--accent);
+}
+
+/* ---- Desktop popover ---- */
+.popover {
+  position: fixed;
+  z-index: 1000;
+  width: 248px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--device-bg);
+  box-shadow:
+    0 0 0 1px var(--edge),
+    0 12px 40px rgba(0, 0, 0, 0.18);
+  animation: popIn 0.16s ease-out;
+  transform-origin: top left;
+}
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+/* invisible click-catcher behind the popover */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+
+/* ---- Mobile stacked sheet ---- */
+.sheetScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  animation: scrimIn 0.28s ease forwards;
+}
+@keyframes scrimIn {
+  to {
+    opacity: 1;
+  }
+}
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1001;
+  background: var(--device-bg);
+  border-radius: 22px 22px 0 0;
+  padding: 8px 20px calc(24px + env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.3);
+  transform: translateY(100%);
+  animation: sheetUp 0.32s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+@keyframes sheetUp {
+  to {
+    transform: translateY(0);
+  }
+}
+.sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+}
+.sheetTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.sheetClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--control-bg);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.sheetClose:hover {
+  background: var(--seg-hover-bg);
+}
+.sheetBody {
+  padding-top: 8px;
+}

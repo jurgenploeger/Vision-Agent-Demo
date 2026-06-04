@@ -6,7 +6,7 @@
 //
 //   import { Orb, type AgentState } from ".../visualizations";
 //   <div style={{ width: 320, height: 320 }}>
-//     <Orb hues={[252]} running state="speaking" dark={false} />
+//     <Orb colors={[{ h: 252, s: 0.88, v: 1 }]} running state="speaking" dark={false} />
 //   </div>
 
 export { default as Orb } from "./Orb";
@@ -14,6 +14,15 @@ export { default as Glow } from "./Glow";
 export { default as Ring } from "./Ring";
 export { default as Wave } from "./Wave";
 export { default as Aura } from "./Aura";
+
+// Colour model (full HSV) + conversions, shared by the picker and the shaders.
+export {
+  type Color,
+  hsvToHex,
+  hexToHsv,
+  hsvToRgb,
+  rgbToHsv,
+} from "../color";
 
 // Lower-level engine + driver tables, for consumers who want to add a style.
 export { default as ShaderCanvas, type VisualizationProps } from "./ShaderCanvas";

@@ -10,11 +10,12 @@ import Ring from "./visualizations/Ring";
 import Aura from "./visualizations/Aura";
 import Wave from "./visualizations/Wave";
 import { AgentState } from "./visualizations/states";
+import type { Color } from "./color";
 import { STATE_LABEL } from "./stateLabels";
 
 export default function Phone({
   viz,
-  hues,
+  colors,
   state,
   dark,
   showMenu,
@@ -23,7 +24,7 @@ export default function Phone({
   variant = "mobile",
 }: {
   viz: Viz;
-  hues: number[];
+  colors: Color[];
   state: AgentState;
   dark: boolean;
   showMenu: boolean; // mobile: header carries the hamburger + theme toggle
@@ -164,7 +165,7 @@ export default function Phone({
           className={`${styles.auraLayer} ${viz === "aura" ? styles.vizOn : ""}`}
           aria-hidden
         >
-          <Aura hues={hues} running={viz === "aura"} state={state} dark={dark} />
+          <Aura colors={colors} running={viz === "aura"} state={state} dark={dark} />
         </div>
 
         {/* App header */}
@@ -177,7 +178,7 @@ export default function Phone({
             <span className={styles.iconBtn} aria-hidden />
           )}
           <div className={styles.title}>
-            <span className={styles.agentName}>Voice Agents</span>
+            <span className={styles.agentName}>Voice Agent</span>
             <span className={styles.status}>
               <span className={styles.statusDot} data-state={state} aria-hidden />
               {STATE_LABEL[state]}
@@ -200,16 +201,16 @@ export default function Phone({
         <div className={styles.viz}>
           <div ref={bouncerRef} className={styles.bouncer}>
             <div className={`${styles.vizLayer} ${viz === "orb" ? styles.vizOn : ""}`}>
-              <Orb hues={hues} running={viz === "orb"} state={state} dark={dark} />
+              <Orb colors={colors} running={viz === "orb"} state={state} dark={dark} />
             </div>
             <div className={`${styles.vizLayer} ${viz === "glow" ? styles.vizOn : ""}`}>
-              <Glow hues={hues} running={viz === "glow"} state={state} dark={dark} />
+              <Glow colors={colors} running={viz === "glow"} state={state} dark={dark} />
             </div>
             <div className={`${styles.vizLayer} ${viz === "ring" ? styles.vizOn : ""}`}>
-              <Ring hues={hues} running={viz === "ring"} state={state} dark={dark} />
+              <Ring colors={colors} running={viz === "ring"} state={state} dark={dark} />
             </div>
             <div className={`${styles.vizLayer} ${viz === "wave" ? styles.vizOn : ""}`}>
-              <Wave hues={hues} running={viz === "wave"} state={state} dark={dark} />
+              <Wave colors={colors} running={viz === "wave"} state={state} dark={dark} />
             </div>
           </div>
         </div>
