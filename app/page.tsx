@@ -6,23 +6,29 @@ import styles from "./page.module.css";
 import Phone from "./components/Phone";
 import Controls from "./components/Controls";
 import { AgentState } from "./components/visualizations/states";
+import {
+  type Color,
+  DEFAULT_COLOR,
+  nextColor,
+  shuffleColors,
+} from "./components/color";
 
 export type Viz = "orb" | "glow" | "ring" | "aura" | "wave";
-
-// Deep electric blue-violet so the first render looks intentional (Siri-like).
-const DEFAULT_HUE = 252;
 
 type Theme = "light" | "dark";
 
 export default function Page() {
   const [viz, setViz] = useState<Viz>("orb");
   const [state, setState] = useState<AgentState>("speaking");
-  const [colors, setColors] = useState<number[]>([DEFAULT_HUE]); // 1-3 hues
+  const [colors, setColors] = useState<Color[]>([DEFAULT_COLOR]); // 1-3 full colours
   // Stable per-colour ids so colour rows can animate in/out by identity.
   const [colorIds, setColorIds] = useState<number[]>([0]);
   const colorIdSeq = useRef(1);
   const [theme, setTheme] = useState<Theme>("light");
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Mobile: when the colour picker's stacked sheet is open, the settings sheet
+  // behind it recedes (iOS stacked-sheet look).
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   // Desktop only: preview the demo as a phone or a landscape desktop window.
   // Switching smoothly morphs the frame's size/radius (see the transitions on
@@ -114,10 +120,10 @@ export default function Page() {
     userOverrodeTheme.current = true;
     setTheme((t) => (t === "light" ? "dark" : "light"));
   };
-  const setColorAt = (i: number, hue: number) =>
-    setColors((c) => c.map((h, idx) => (idx === i ? hue : h)));
+  const setColorAt = (i: number, color: Color) =>
+    setColors((c) => c.map((col, idx) => (idx === i ? color : col)));
   const addColor = () => {
-    setColors((c) => (c.length >= 3 ? c : [...c, (c[c.length - 1] + 80) % 360]));
+    setColors((c) => (c.length >= 3 ? c : [...c, nextColor(c[c.length - 1])]));
     setColorIds((ids) =>
       ids.length >= 3 ? ids : [...ids, colorIdSeq.current++]
     );
@@ -128,33 +134,9 @@ export default function Page() {
   };
   // Shuffle picks a random base hue + a classic harmony scheme (analogous,
   // complementary, triadic, split-complementary) so the result always reads as
-  // an intentional, harmonized palette rather than a random clash.
-  const shuffle = () =>
-    setColors((c) => {
-      const n = c.length;
-      const base = Math.random() * 360;
-      if (n === 1) return [Math.round(base) % 360];
-      const schemes: Record<number, number[][]> = {
-        2: [
-          [0, 40], // analogous
-          [0, 180], // complementary
-          [0, 150], // split-complementary
-          [0, 120], // partial triad
-        ],
-        3: [
-          [0, 35, 70], // analogous
-          [0, 120, 240], // triadic
-          [0, 150, 210], // split-complementary
-          [0, 30, 320], // analogous + accent
-        ],
-      };
-      const set = schemes[n] ?? c.map((_, i) => i * 40);
-      const offsets = set[Math.floor(Math.random() * set.length)];
-      const jitter = () => Math.random() * 16 - 8; // ±8° keeps it organic
-      return offsets.map(
-        (o, i) => Math.round(((base + o + (i ? jitter() : 0)) % 360 + 360) % 360),
-      );
-    });
+  // an intentional, harmonized palette rather than a random clash. (Generates
+  // tuned S/V so shuffles keep their confident look — see color.ts.)
+  const shuffle = () => setColors((c) => shuffleColors(c.length));
 
   const controlsProps = {
     viz,
@@ -167,6 +149,8 @@ export default function Page() {
     addColor,
     removeColor,
     shuffle,
+    isMobile,
+    onPickerOpenChange: setPickerOpen,
   };
 
   return (
@@ -209,7 +193,7 @@ export default function Page() {
 
           <Phone
             viz={viz}
-            hues={colors}
+            colors={colors}
             state={state}
             dark={theme === "dark"}
             showMenu={false}
@@ -231,7 +215,7 @@ export default function Page() {
           <div className={styles.phoneLayer}>
             <Phone
               viz={viz}
-              hues={colors}
+              colors={colors}
               state={state}
               dark={theme === "dark"}
               showMenu
@@ -253,19 +237,23 @@ export default function Page() {
             aria-label="Settings"
             aria-hidden={!sheetOpen}
           >
-            <div className={styles.sheetHead}>
-              <span className={styles.sheetTitle}>Settings</span>
-              <button
-                className={styles.sheetClose}
-                aria-label="Close"
-                tabIndex={sheetOpen ? 0 : -1}
-                onClick={closeSheet}
-              >
-                <X size={18} weight="bold" />
-              </button>
-            </div>
-            <div className={styles.sheetBody}>
-              <Controls {...controlsProps} />
+            <div
+              className={`${styles.sheet2Surface} ${pickerOpen ? styles.sheet2Receded : ""}`}
+            >
+              <div className={styles.sheetHead}>
+                <span className={styles.sheetTitle}>Settings</span>
+                <button
+                  className={styles.sheetClose}
+                  aria-label="Close"
+                  tabIndex={sheetOpen ? 0 : -1}
+                  onClick={closeSheet}
+                >
+                  <X size={18} weight="bold" />
+                </button>
+              </div>
+              <div className={styles.sheetBody}>
+                <Controls {...controlsProps} />
+              </div>
             </div>
           </div>
 

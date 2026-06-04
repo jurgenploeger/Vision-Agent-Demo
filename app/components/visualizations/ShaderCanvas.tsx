@@ -2,16 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Renderer, Triangle, Program, Mesh, Vec2 } from "ogl";
+import { Renderer, Triangle, Program, Mesh, Vec2, Vec3 } from "ogl";
 import { VERTEX } from "./shaders";
 import { AgentState, STATE_PARAMS, StateParams } from "./states";
+import type { Color } from "../color";
 
 // Public props shared by every visualization (Orb/Wave/Aura). The component is
 // fully driven from the outside — host an agent's lifecycle by setting `state`,
-// and its palette by setting `hues`. No global CSS, fonts, or framework APIs
+// and its palette by setting `colors`. No global CSS, fonts, or framework APIs
 // are required.
 export type VisualizationProps = {
-  hues: number[]; // 1-3 colour hues (0-360); lerped internally for smoothness
+  colors: Color[]; // 1-3 full HSV colours; lerped internally for smoothness
   running: boolean; // only the active visualization animates
   state: AgentState; // conversational state; drives motion/appearance
   dark: boolean; // theme — tunes the halo (clean on white vs glow on dark)
@@ -19,6 +20,10 @@ export type VisualizationProps = {
   style?: CSSProperties; // forwarded to the wrapper (overrides the fill default)
   fallback?: ReactNode; // shown if WebGL is unavailable (defaults to a message)
 };
+
+// HSV in the shader's expected form: hue as a 0-1 fraction, sat/val 0-1.
+type HSV = [number, number, number];
+const toHSV = (c: Color): HSV => [((((c.h % 360) + 360) % 360) / 360), c.s, c.v];
 
 type Props = VisualizationProps & {
   fragment: string;
@@ -42,7 +47,7 @@ const FALLBACK_STYLE: CSSProperties = {
 
 export default function ShaderCanvas({
   fragment,
-  hues,
+  colors,
   running,
   state,
   dark,
@@ -51,13 +56,17 @@ export default function ShaderCanvas({
   fallback,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  // [hue0, hue1, hue2, count] targets; missing colours fall back to hue0.
-  const colorTarget = useRef<[number, number, number, number]>([
-    hues[0],
-    hues[1] ?? hues[0],
-    hues[2] ?? hues[0],
-    hues.length,
-  ]);
+  // Target palette: three HSV colours + active count. Missing slots fall back
+  // to colour 0 so a 1- or 2-colour palette still has valid uniforms.
+  const buildTarget = (): { cols: [HSV, HSV, HSV]; count: number } => ({
+    cols: [
+      toHSV(colors[0]),
+      toHSV(colors[1] ?? colors[0]),
+      toHSV(colors[2] ?? colors[0]),
+    ],
+    count: colors.length,
+  });
+  const colorTarget = useRef(buildTarget());
   const stateTarget = useRef<StateParams>(STATE_PARAMS[state]);
   const darkRef = useRef(dark);
   const controls = useRef<{ start: () => void; stop: () => void } | null>(null);
@@ -65,13 +74,9 @@ export default function ShaderCanvas({
 
   // Keep the latest targets without re-running the heavy GL effect.
   useEffect(() => {
-    colorTarget.current = [
-      hues[0],
-      hues[1] ?? hues[0],
-      hues[2] ?? hues[0],
-      hues.length,
-    ];
-  }, [hues]);
+    colorTarget.current = buildTarget();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colors]);
   useEffect(() => {
     stateTarget.current = STATE_PARAMS[state];
   }, [state]);
@@ -120,10 +125,10 @@ export default function ShaderCanvas({
       depthTest: false,
       uniforms: {
         uTime: { value: 0 },
-        uHue: { value: colorTarget.current[0] },
-        uHue1: { value: colorTarget.current[1] },
-        uHue2: { value: colorTarget.current[2] },
-        uCount: { value: colorTarget.current[3] },
+        uCol0: { value: new Vec3(...colorTarget.current.cols[0]) },
+        uCol1: { value: new Vec3(...colorTarget.current.cols[1]) },
+        uCol2: { value: new Vec3(...colorTarget.current.cols[2]) },
+        uCount: { value: colorTarget.current.count },
         uResolution: { value: new Vec2(1, 1) },
         uLevel: { value: stateTarget.current.level },
         uBright: { value: stateTarget.current.bright },
@@ -151,10 +156,10 @@ export default function ShaderCanvas({
       );
       // Keep the still-frame correct (colours + theme) when rAF is paused.
       const ct = colorTarget.current;
-      program.uniforms.uHue.value = ct[0];
-      program.uniforms.uHue1.value = ct[1];
-      program.uniforms.uHue2.value = ct[2];
-      program.uniforms.uCount.value = ct[3];
+      program.uniforms.uCol0.value.set(...ct.cols[0]);
+      program.uniforms.uCol1.value.set(...ct.cols[1]);
+      program.uniforms.uCol2.value.set(...ct.cols[2]);
+      program.uniforms.uCount.value = ct.count;
       program.uniforms.uDark.value = darkRef.current ? 1 : 0;
       renderer.render({ scene: mesh });
     };
@@ -165,12 +170,18 @@ export default function ShaderCanvas({
     let raf = 0;
     let last = performance.now();
     let t = 0;
-    let curHue0 = colorTarget.current[0];
-    let curHue1 = colorTarget.current[1];
-    let curHue2 = colorTarget.current[2];
-    let curCount = colorTarget.current[3];
-    const lerpHue = (cur: number, target: number) =>
-      cur + ((((target - cur + 540) % 360) - 180) * 0.12);
+    let cur0: HSV = [...colorTarget.current.cols[0]];
+    let cur1: HSV = [...colorTarget.current.cols[1]];
+    let cur2: HSV = [...colorTarget.current.cols[2]];
+    let curCount = colorTarget.current.count;
+    // Lerp an HSV toward its target in place: hue (0-1) takes the shortest path
+    // around the wheel; saturation and value lerp linearly.
+    const lerpHSV = (cur: HSV, target: HSV) => {
+      const dh = (((target[0] - cur[0] + 1.5) % 1.0) - 0.5) * 0.12;
+      cur[0] = (cur[0] + dh + 1.0) % 1.0;
+      cur[1] += (target[1] - cur[1]) * 0.12;
+      cur[2] += (target[2] - cur[2]) * 0.12;
+    };
     // Live state drivers, lerped toward their targets each frame.
     let curSpeed = stateTarget.current.speed;
     let curLevel = stateTarget.current.level;
@@ -201,17 +212,17 @@ export default function ShaderCanvas({
       // Reduced motion: keep it barely alive instead of buzzing.
       t += dt * (reduced ? 0.07 : 1.0) * curSpeed;
 
-      // Lerp each colour hue along the shortest path; count eases (crossfade).
+      // Lerp each colour toward its target; count eases (crossfade).
       const ct = colorTarget.current;
-      curHue0 = lerpHue(curHue0, ct[0]);
-      curHue1 = lerpHue(curHue1, ct[1]);
-      curHue2 = lerpHue(curHue2, ct[2]);
-      curCount += (ct[3] - curCount) * 0.12;
+      lerpHSV(cur0, ct.cols[0]);
+      lerpHSV(cur1, ct.cols[1]);
+      lerpHSV(cur2, ct.cols[2]);
+      curCount += (ct.count - curCount) * 0.12;
 
       program.uniforms.uTime.value = t;
-      program.uniforms.uHue.value = curHue0;
-      program.uniforms.uHue1.value = curHue1;
-      program.uniforms.uHue2.value = curHue2;
+      program.uniforms.uCol0.value.set(...cur0);
+      program.uniforms.uCol1.value.set(...cur1);
+      program.uniforms.uCol2.value.set(...cur2);
       program.uniforms.uCount.value = curCount;
       program.uniforms.uLevel.value = curLevel;
       program.uniforms.uBright.value = curBright;
@@ -231,13 +242,13 @@ export default function ShaderCanvas({
         // Begin at the current colours so a tab switch after a colour change
         // doesn't sweep from a stale value.
         const ct = colorTarget.current;
-        curHue0 = ct[0];
-        curHue1 = ct[1];
-        curHue2 = ct[2];
-        curCount = ct[3];
-        program.uniforms.uHue.value = curHue0;
-        program.uniforms.uHue1.value = curHue1;
-        program.uniforms.uHue2.value = curHue2;
+        cur0 = [...ct.cols[0]];
+        cur1 = [...ct.cols[1]];
+        cur2 = [...ct.cols[2]];
+        curCount = ct.count;
+        program.uniforms.uCol0.value.set(...cur0);
+        program.uniforms.uCol1.value.set(...cur1);
+        program.uniforms.uCol2.value.set(...cur2);
         program.uniforms.uCount.value = curCount;
         last = performance.now();
         frame();

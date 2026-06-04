@@ -1,7 +1,8 @@
 // Shared GLSL building blocks + one fragment shader per visualization.
-// All shaders are time-driven (uTime), hue-driven (uHue, degrees 0-360),
-// and output PREMULTIPLIED alpha so the colored halo bleeds into the white
-// phone screen instead of sitting on top of it like a sticker.
+// All shaders are time-driven (uTime) and colour-driven (uCol0/1/2, full HSV
+// so brand colours — including muted/dark tones — render true), and output
+// PREMULTIPLIED alpha so the colored halo bleeds into the white phone screen
+// instead of sitting on top of it like a sticker.
 
 export const VERTEX = /* glsl */ `
 attribute vec2 uv;
@@ -18,7 +19,7 @@ void main() {
 const HEADER = /* glsl */ `
 precision highp float;
 uniform float uTime;
-uniform float uHue;        // degrees, 0-360
+uniform vec3  uCol0;       // colour 1 as HSV: (hue 0-1, sat 0-1, val 0-1)
 uniform vec2  uResolution; // drawing-buffer pixels
 // Conversational-state drivers (lerped on the JS side). See states.ts.
 uniform float uLevel;      // motion amplitude / energy
@@ -30,8 +31,8 @@ uniform float uLoad;       // bouncing loader sweep  -> connecting
 uniform float uFlow;       // traveling / spinner    -> thinking
 uniform float uReact;      // reactive amplitude     -> listening / speaking
 uniform float uDark;       // 1 = dark theme, 0 = light (halo tuning)
-uniform float uHue1;       // colour 2 (degrees); uHue (above) is colour 1
-uniform float uHue2;       // colour 3 (degrees)
+uniform vec3  uCol1;       // colour 2 as HSV; uCol0 (above) is colour 1
+uniform vec3  uCol2;       // colour 3 as HSV
 uniform float uCount;      // active colours, lerped 1 .. 3
 varying vec2  vUv;
 
@@ -42,11 +43,6 @@ vec3 hsv2rgb(vec3 c) {
   vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
   vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
   return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-}
-
-// hue helper: takes a degree offset from the base hue
-vec3 hueCol(float degOffset, float s, float v) {
-  return hsv2rgb(vec3(fract((uHue + degOffset) / 360.0), s, v));
 }
 
 // Desaturate toward luminance (used for the "thinking" busy look).
@@ -73,22 +69,20 @@ float pingpong(float x, float b) {
   return b - abs(m - b);
 }
 
-// Vivid, white-background-tuned color from a single hue (degrees). Saturation
-// and value are fixed (the slider only moves hue); the yellow-green band
-// (~45-180) is tamed because high S/V there reads acidic on white.
-vec3 vivid(float hueDeg) {
-  float h = mod(hueDeg, 360.0);
-  float yg = smoothstep(45.0, 80.0, h) * (1.0 - smoothstep(150.0, 185.0, h));
-  // Bright + confident; the yellow-green band is only gently tamed so it never
-  // goes muddy. Dark mode pushes saturation a touch higher so it stays vivid.
-  float s = mix(0.88, 0.68, yg) + uDark * 0.06;
-  float v = mix(1.0, 0.92, yg);
-  return hsv2rgb(vec3(h / 360.0, clamp(s, 0.0, 1.0), v));
+// The user's chosen colour, honoured as-is (full HSV — hue, saturation AND
+// value), so brand colours including muted/pastel/dark tones render true. Dark
+// mode nudges saturation up a touch so colours stay vivid over the dark
+// backdrop. The old white-background hue taming now lives at palette-generation
+// time (see color.ts vividColor) so explicit picks aren't altered here.
+vec3 vivid(vec3 hsv) {
+  return hsv2rgb(vec3(hsv.x, clamp(hsv.y + uDark * 0.06, 0.0, 1.0), hsv.z));
 }
 
-// Deep, saturated version of a hue for interior bases / shadows.
-vec3 deepHue(float hueDeg) {
-  return hsv2rgb(vec3(mod(hueDeg, 360.0) / 360.0, 0.9, 0.42));
+// Deep / shadow version of a chosen colour for interior bases & shading —
+// darker and a touch more saturated, derived from the colour itself so it
+// tracks the user's hue and tone rather than a fixed value.
+vec3 deepHue(vec3 hsv) {
+  return hsv2rgb(vec3(hsv.x, clamp(hsv.y * 1.06, 0.0, 1.0), hsv.z * 0.46));
 }
 `;
 
@@ -244,22 +238,22 @@ void main() {
   // Dark mode pushes saturation higher so the orb reads as vivid/neon over the
   // dark backdrop instead of muted/muddy. Light mode is unchanged.
   float satK = mix(1.85, 2.35, uDark);
-  vec3 k0 = saturate3(vivid(uHue),  satK);
-  vec3 k1 = saturate3(vivid(uHue1), satK);
-  vec3 k2 = saturate3(vivid(uHue2), satK);
+  vec3 k0 = saturate3(vivid(uCol0),  satK);
+  vec3 k1 = saturate3(vivid(uCol1), satK);
+  vec3 k2 = saturate3(vivid(uCol2), satK);
   // SINGLE-colour fallback: rather than every cloud being the IDENTICAL hue (so
   // the interior barely moves), the 2nd/3rd clouds become a brighter and a
   // deeper SHADE of that one hue — so a mono orb still shows light and deep
   // masses circulating inside. These crossfade to the real colours 2/3 as those
   // activate, so the multi-colour look is unchanged.
-  vec3 kLight = saturate3(clamp(vivid(uHue) * 1.20, 0.0, 1.0), mix(1.4, 1.8, uDark));
-  vec3 kDeep  = saturate3(vivid(uHue) * 0.62, mix(1.5, 1.95, uDark));
+  vec3 kLight = saturate3(clamp(vivid(uCol0) * 1.20, 0.0, 1.0), mix(1.4, 1.8, uDark));
+  vec3 kDeep  = saturate3(vivid(uCol0) * 0.62, mix(1.5, 1.95, uDark));
   vec3 colA = k0;
   vec3 colB = mix(kLight, k1, clamp(uCount - 1.0, 0.0, 1.0));
   vec3 colC = mix(kDeep,  k2, clamp(uCount - 2.0, 0.0, 1.0));
   // Base fills the gaps between clouds — kept saturated so the mesh stays vivid;
   // less white mixed in on dark so the colour stays neon rather than washing out.
-  vec3 base = saturate3(mix(vivid(uHue), vec3(1.0), mix(0.08, 0.03, uDark)), mix(1.4, 1.8, uDark));
+  vec3 base = saturate3(mix(vivid(uCol0), vec3(1.0), mix(0.08, 0.03, uDark)), mix(1.4, 1.8, uDark));
 
   vec3 col = base;
   col = mix(col, colA, b0);
@@ -287,8 +281,8 @@ void main() {
   // --- Composite: TRANSLUCENT glassy body over a soft halo ---
   // The body lets the background show through (more see-through in the centre,
   // a more opaque glassy rim), so dark mode reveals the dark backdrop.
-  vec3 haloCol = mix(mix(vivid(uHue), vec3(1.0), 0.78),
-                     mix(vivid(uHue), vec3(1.0), 0.30), uDark);
+  vec3 haloCol = mix(mix(vivid(uCol0), vec3(1.0), 0.78),
+                     mix(vivid(uCol0), vec3(1.0), 0.30), uDark);
   // Lower opacity + wider, softer falloff so the border glow melts into the bg.
   float halo = exp(-pow(max(r - R, 0.0) / 0.075, 2.0));
   float haloAmp = mix(0.07, 0.14, uDark) + 0.08 * uReact;
@@ -353,12 +347,12 @@ void main() {
   float b0 = smoothstep(1.15, 0.1, length(sp - c0));
   float b1 = smoothstep(1.30, 0.1, length(sp - c1));
 
-  vec3 k0   = saturate3(vivid(uHue), 1.7);
-  vec3 kL   = saturate3(clamp(vivid(uHue) * 1.18, 0.0, 1.0), 1.3);
-  vec3 kD   = saturate3(vivid(uHue) * 0.62, 1.4);
-  vec3 colB = mix(kL, saturate3(vivid(uHue1), 1.7), clamp(uCount - 1.0, 0.0, 1.0));
-  vec3 colC = mix(kD, saturate3(vivid(uHue2), 1.7), clamp(uCount - 2.0, 0.0, 1.0));
-  vec3 base = saturate3(mix(vivid(uHue), vec3(1.0), 0.06), 1.3);
+  vec3 k0   = saturate3(vivid(uCol0), 1.7);
+  vec3 kL   = saturate3(clamp(vivid(uCol0) * 1.18, 0.0, 1.0), 1.3);
+  vec3 kD   = saturate3(vivid(uCol0) * 0.62, 1.4);
+  vec3 colB = mix(kL, saturate3(vivid(uCol1), 1.7), clamp(uCount - 1.0, 0.0, 1.0));
+  vec3 colC = mix(kD, saturate3(vivid(uCol2), 1.7), clamp(uCount - 2.0, 0.0, 1.0));
+  vec3 base = saturate3(mix(vivid(uCol0), vec3(1.0), 0.06), 1.3);
   vec3 col = base;
   col = mix(col, k0,   b0);
   col = mix(col, colB, b1);
@@ -376,8 +370,8 @@ void main() {
   col += fres * 0.10 * mix(vec3(1.0), k0, 0.6); // faint, soft rim tint
 
   // Composite: soft globe over a soft halo (premultiplied).
-  vec3 haloCol = mix(mix(vivid(uHue), vec3(1.0), 0.75),
-                     mix(vivid(uHue), vec3(1.0), 0.32), uDark);
+  vec3 haloCol = mix(mix(vivid(uCol0), vec3(1.0), 0.75),
+                     mix(vivid(uCol0), vec3(1.0), 0.32), uDark);
   float halo = exp(-pow(max(r - R * 0.8, 0.0) / 0.09, 2.0));
   float haloA = halo * (mix(0.05, 0.10, uDark) + 0.05 * uReact);
   // Airy body: the gaps between colour are semi-transparent so the background
@@ -459,9 +453,9 @@ void main() {
   // evenly-spaced angles and blend with periodic (wrap-around) weights, so there
   // is no start/end seam and the hues fade softly into one another. The set
   // slowly rotates; colours 2/3 crossfade in with uCount. ---
-  vec3 k0 = vivid(uHue);
-  vec3 k1 = vivid(uHue1);
-  vec3 k2 = vivid(uHue2);
+  vec3 k0 = vivid(uCol0);
+  vec3 k1 = vivid(uCol1);
+  vec3 k2 = vivid(uCol2);
   float spin = t * 0.16;
   float sharp = 1.3;                          // lower = softer fade between hues
   float w0 = exp(sharp * (cos(a - spin) - 1.0));
@@ -549,9 +543,9 @@ void main() {
   // --- gradient colours flowing ALONG the string: broad, soft bands whose
   // centres slowly drift, so the colours smoothly change over time. 1-3 colours
   // crossfade in/out with uCount (a single colour fills the whole line). ---
-  vec3 k0 = vivid(uHue);
-  vec3 k1 = vivid(uHue1);
-  vec3 k2 = vivid(uHue2);
+  vec3 k0 = vivid(uCol0);
+  vec3 k1 = vivid(uCol1);
+  vec3 k2 = vivid(uCol2);
   float gx = clamp(x + 0.5, 0.0, 1.0);             // 0..1 along the line
   float m0 = 0.22 + 0.12 * sin(t * 0.13);
   float m1 = 0.50 + 0.13 * sin(t * 0.11 + 2.1);
@@ -626,9 +620,9 @@ void main() {
   // screen ebbs and flows. Sampled in the flowing (warped) space so the bands
   // aren't straight lines. Bands gate in/out with uCount, so 1 or 2 colours
   // degrade gracefully (and collapse to one hue when only one is active). ---
-  vec3 c0 = vivid(uHue);
-  vec3 c1 = vivid(uHue1);
-  vec3 c2 = vivid(uHue2);
+  vec3 c0 = vivid(uCol0);
+  vec3 c1 = vivid(uCol1);
+  vec3 c2 = vivid(uCol2);
   // Drifting band centres -> the visible amount of each colour changes in time.
   float m0 = 0.18 + 0.12 * sin(t * 0.11);
   float m1 = 0.50 + 0.13 * sin(t * 0.09 + 2.1);

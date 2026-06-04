@@ -164,18 +164,41 @@
   max-height: 88dvh;
   display: flex;
   flex-direction: column;
-  padding: 20px 20px max(20px, env(safe-area-inset-bottom));
-  background: var(--device-bg);
-  border-radius: 22px 22px 0 0;
-  /* Alpha tracks scroll progress so the upward shadow doesn't bleed into the
-     bottom of the viewport while the sheet is parked off-screen (--p = 0). */
-  box-shadow: 0 -12px 40px -12px rgba(0, 0, 0, calc(0.4 * var(--p)));
+  /* Scroll-driven translate lives here and must NOT be transitioned, so the
+     sheet tracks the scroll gesture 1:1. Visible card styling + the picker
+     recede animation live on .sheet2Surface instead. */
   transform: translateY(calc((1 - var(--p)) * 100%));
   will-change: transform;
   pointer-events: none;
 }
 .sheet2Open {
   pointer-events: auto;
+}
+
+/* The visible card. Separate from .sheet2 so its scale/translate recede (when
+   the colour picker's stacked sheet opens) can transition independently of the
+   scroll-driven transform above — an iOS stacked-sheet look. */
+.sheet2Surface {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 20px 20px max(20px, env(safe-area-inset-bottom));
+  background: var(--device-bg);
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -12px 40px -12px rgba(0, 0, 0, calc(0.4 * var(--p)));
+  transform-origin: top center;
+  transition: transform 0.34s cubic-bezier(0.32, 0.72, 0, 1),
+    filter 0.34s ease, border-radius 0.34s ease;
+}
+.sheet2Receded {
+  transform: scale(0.93) translateY(-10px);
+  filter: brightness(0.82);
+  border-radius: 16px 16px 0 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet2Surface {
+    transition: none;
+  }
 }
 
 .sheetHead {
@@ -227,115 +250,99 @@
   color: var(--muted);
 }
 
-/* ---------- Hue slider (monochrome chrome) ---------- */
+/* ---------- Colour swatches (full-colour picker trigger) ---------- */
+/* Up to three colours sit side-by-side; tapping one opens the colour picker
+   (a popover on desktop, a stacked sheet on mobile). */
 
-.slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 22px;
-  background: transparent;
-  cursor: pointer;
-}
-
-/* Thin track — its fill comes from --track-bg, set per slider below. */
-.slider::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--track-bg, var(--control-bg));
-}
-.slider::-moz-range-track {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--track-bg, var(--control-bg));
-}
-
-/* Color slider: a full, saturated hue spectrum signals what it does. */
-.hueTrack {
-  --track-bg: linear-gradient(
-    90deg,
-    hsl(0, 95%, 55%), hsl(60, 95%, 50%), hsl(120, 90%, 45%),
-    hsl(180, 90%, 45%), hsl(240, 95%, 60%), hsl(300, 95%, 58%), hsl(360, 95%, 55%)
-  );
-}
-
-/* Colour rows live in a gap-less column so a collapsed (0-height) row takes up
-   no space — inter-row spacing comes from each row's own padding, which lives
-   inside the collapsing area and so animates away with it. */
-.colorRows {
-  display: flex;
-  flex-direction: column;
-}
-
-/* Each row animates its pixel height (0 <-> 36px) — a plain height tween
-   interpolates smoothly per frame, unlike grid `fr` which the browser steps
-   in coarse jumps. Rows are a uniform 36px (26px content + 10px gap). */
-.colorRow {
-  overflow: hidden;
-  animation: colorRowIn 0.38s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-@keyframes colorRowIn {
-  from {
-    height: 0;
-    opacity: 0;
-  }
-  to {
-    height: 36px;
-    opacity: 1;
-  }
-}
-
-/* Removing a colour reverses the add: the row collapses (36px -> 0) before it
-   is dropped from state, so the sheet shrinks down as smoothly as it grew. */
-.colorRowExiting {
-  animation: colorRowOut 0.38s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-@keyframes colorRowOut {
-  from {
-    height: 36px;
-    opacity: 1;
-  }
-  to {
-    height: 0;
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .colorRow,
-  .colorRowExiting {
-    animation: none;
-  }
-}
-
-/* Fixed-height row content; the 10px bottom padding is the gap between rows. */
-.colorRowInner {
-  height: 36px;
+.swatchRow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-bottom: 10px;
+  gap: 8px;
 }
 
-.hexInput {
-  flex: none;
-  width: 76px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: none;
+.swatch {
+  position: relative;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  animation: swatchIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.swatchExiting {
+  animation: swatchOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+  pointer-events: none;
+}
+@keyframes swatchIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes swatchOut {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.8); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swatch,
+  .swatchExiting { animation: none; }
+}
+
+.swatchBtn {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--edge);
+  transition: transform 0.14s ease, box-shadow 0.18s ease;
+}
+.swatchBtn:hover { transform: translateY(-1px); }
+.swatchBtnActive {
+  box-shadow: 0 0 0 2px var(--device-bg), 0 0 0 4px var(--accent);
+}
+
+/* Remove badge — shown when more than one colour is present. */
+.swatchRemove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  box-shadow: 0 0 0 2px var(--device-bg);
+  cursor: pointer;
+  transition: transform 0.14s ease, opacity 0.14s ease;
+}
+.swatchRemove:hover { transform: scale(1.12); }
+
+/* Add-colour chip; collapses away at the 3-colour max. */
+.addSwatch {
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--muted);
   background: var(--control-bg);
   box-shadow: inset 0 0 0 1px var(--control-edge);
-  color: var(--text);
-  font-family: var(--font-geist-mono, ui-monospace, monospace);
-  font-size: 11.5px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.16s ease,
+    flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    margin 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s ease;
 }
-.hexInput:focus {
-  outline: none;
-  box-shadow: inset 0 0 0 1.5px var(--muted);
+.addSwatch:hover { background: var(--seg-hover-bg); color: var(--text-soft); }
+.addSwatch:active { transform: scale(0.95); }
+.addSwatchHidden {
+  flex-basis: 0;
+  margin-left: -8px;
+  opacity: 0;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .colorActions {
@@ -343,35 +350,6 @@
   flex-wrap: nowrap;
   align-items: center;
   margin-top: 2px;
-}
-
-.colorRemove {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
-  overflow: hidden;
-  color: var(--muted);
-  background: var(--control-bg);
-  transition: color 0.2s ease, background 0.2s ease,
-    width 0.38s cubic-bezier(0.4, 0, 0.2, 1),
-    margin 0.38s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.34s ease;
-}
-.colorRemove:hover {
-  color: var(--text-soft);
-  background: var(--seg-hover-bg);
-}
-
-/* Collapses with the same easing as the colour rows / action buttons so it
-   animates in and out instead of popping. The negative margin cancels the
-   row's 10px gap as it collapses, so the slider regains the full width. */
-.colorRemoveHidden {
-  width: 0;
-  margin-left: -10px;
-  opacity: 0;
-  pointer-events: none;
 }
 
 .addColor {
@@ -413,26 +391,6 @@
   pointer-events: none;
 }
 
-/* Simple monochrome handle. */
-.slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  margin-top: -7px;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: #161618;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
-}
-.slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: #161618;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
-}
 
 /* ---------- Segmented control (shared by Style + State) ---------- */
 /* Full-width control with equal segments, used for both the 3-item Style
