@@ -100,6 +100,26 @@
   outline: none;
 }
 
+@media (max-width: 600px) {
+  /* Match the preview swatch to the hex field's height (it sat larger because it
+     was sized to a preset cell), and use a >=16px font so tapping the field
+     doesn't trigger iOS's focus-zoom. */
+  .hexPreview {
+    /* Stretch to the row height so the swatch is exactly as tall as the hex
+       field beside it, and keep it square. */
+    flex: 0 0 auto;
+    align-self: stretch;
+    width: auto;
+    min-width: 0;
+    height: auto;
+    aspect-ratio: 1;
+  }
+  .hexHash,
+  .hexInput {
+    font-size: 16px;
+  }
+}
+
 /* ---- Presets ---- */
 .presetsLabel {
   margin: 16px 0 8px;

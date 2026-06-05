@@ -45,15 +45,18 @@ export type StateParams = {
   react: number;
 };
 
+// Colours stay FULL across every state — sat and bright are pinned to 1.0 so the
+// palette never dims or desaturates. States differ purely by ANIMATION (the
+// speed/level + load/flow/react motion-pattern weights below), not by tone.
 export const STATE_PARAMS: Record<AgentState, StateParams> = {
-  // calm, dim, slow, barely-there shimmer — resting but ready
-  idle:       { level: 0.2,  speed: 0.4,  bright: 0.55, sat: 0.78, orbit: 0.0, load: 0.0, flow: 0.0, react: 0.12 },
-  // a bouncing loader sweep, muted + pulsing opacity — "not ready yet"
-  connecting: { level: 0.6,  speed: 1.0,  bright: 0.5,  sat: 0.45, orbit: 0.0, load: 1.0, flow: 0.0, react: 0.0 },
-  // gentle responsive expand-contract, full saturated color
-  listening:  { level: 0.6,  speed: 0.9,  bright: 1.0,  sat: 1.0,  orbit: 0.0, load: 0.0, flow: 0.0, react: 0.45 },
-  // fast churning vortex, clearly desaturated — "busy" not "active"
-  thinking:   { level: 0.6,  speed: 1.25, bright: 0.92, sat: 0.4,  orbit: 0.0, load: 0.0, flow: 1.0, react: 0.0 },
+  // calm + slow, barely-there shimmer — resting but ready (full colour)
+  idle:       { level: 0.2,  speed: 0.4,  bright: 1.0, sat: 1.0, orbit: 0.0, load: 0.0, flow: 0.0, react: 0.12 },
+  // a bouncing loader sweep with a pulsing opacity breath — "not ready yet"
+  connecting: { level: 0.6,  speed: 1.0,  bright: 1.0, sat: 1.0, orbit: 0.0, load: 1.0, flow: 0.0, react: 0.0 },
+  // gentle responsive expand-contract
+  listening:  { level: 0.6,  speed: 0.9,  bright: 1.0, sat: 1.0, orbit: 0.0, load: 0.0, flow: 0.0, react: 0.45 },
+  // fast churning vortex — "busy" via MOTION, not a dull tint
+  thinking:   { level: 0.6,  speed: 1.25, bright: 1.0, sat: 1.0, orbit: 0.0, load: 0.0, flow: 1.0, react: 0.0 },
   // strong reactive amplitude, natural speaking pace
-  speaking:   { level: 1.25, speed: 1.25, bright: 1.0,  sat: 1.0,  orbit: 0.0, load: 0.0, flow: 0.0, react: 1.0 },
+  speaking:   { level: 1.25, speed: 1.25, bright: 1.0, sat: 1.0, orbit: 0.0, load: 0.0, flow: 0.0, react: 1.0 },
 };

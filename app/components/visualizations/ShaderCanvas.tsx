@@ -16,6 +16,16 @@ export type VisualizationProps = {
   running: boolean; // only the active visualization animates
   state: AgentState; // conversational state; drives motion/appearance
   dark: boolean; // theme — tunes the halo (clean on white vs glow on dark)
+  // A tap/click inside the visual; `id` increments per tap so a repeat tap on the
+  // same spot still re-triggers the ripple. Position is in the shader's coords()
+  // space (centre = 0,0; normalized to the shorter edge; y up).
+  tap?: { x: number; y: number; id: number } | null;
+  // Live cursor hover, as a ref (updated on mousemove without re-rendering). The
+  // shader smooths `active` into uHoverAmt and follows the position with uHover.
+  hover?: { current: { x: number; y: number; active: boolean } } | null;
+  // Live microphone level, as a ref (updated each frame while recording). Drives
+  // uMic/uVoice so the visual reacts to real audio input in voice mode.
+  mic?: { current: { level: number; active: boolean } } | null;
   className?: string; // forwarded to the wrapper, for sizing/positioning
   style?: CSSProperties; // forwarded to the wrapper (overrides the fill default)
   fallback?: ReactNode; // shown if WebGL is unavailable (defaults to a message)
@@ -51,6 +61,9 @@ export default function ShaderCanvas({
   running,
   state,
   dark,
+  tap,
+  hover,
+  mic,
   className,
   style,
   fallback,
@@ -69,6 +82,9 @@ export default function ShaderCanvas({
   const colorTarget = useRef(buildTarget());
   const stateTarget = useRef<StateParams>(STATE_PARAMS[state]);
   const darkRef = useRef(dark);
+  const tapRef = useRef(tap);
+  const hoverPropRef = useRef(hover);
+  const micPropRef = useRef(mic);
   const controls = useRef<{ start: () => void; stop: () => void } | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -83,6 +99,15 @@ export default function ShaderCanvas({
   useEffect(() => {
     darkRef.current = dark;
   }, [dark]);
+  useEffect(() => {
+    tapRef.current = tap;
+  }, [tap]);
+  useEffect(() => {
+    hoverPropRef.current = hover;
+  }, [hover]);
+  useEffect(() => {
+    micPropRef.current = mic;
+  }, [mic]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -130,6 +155,12 @@ export default function ShaderCanvas({
         uCol1: { value: new Vec3(...colorTarget.current.cols[1]) },
         uCol2: { value: new Vec3(...colorTarget.current.cols[2]) },
         uCount: { value: colorTarget.current.count },
+        uTap: { value: new Vec2(0, 0) },
+        uTapTime: { value: 100 }, // large => no ripple until the first tap
+        uHover: { value: new Vec2(0, 0) },
+        uHoverAmt: { value: 0 },
+        uMic: { value: 0 },
+        uVoice: { value: 0 },
         uResolution: { value: new Vec2(1, 1) },
         uLevel: { value: stateTarget.current.level },
         uBright: { value: stateTarget.current.bright },
@@ -197,6 +228,15 @@ export default function ShaderCanvas({
     // thinking/speaking) — integrating it rather than multiplying uTime keeps the
     // phase continuous, so changing state never makes the comets jump.
     let tSpin = 0;
+    // Tap ripple: when a new tap id arrives, snapshot its position and restart the
+    // elapsed timer; the shader uses uTapTime to expand + fade the ripple.
+    let lastTapId = tapRef.current ? tapRef.current.id : -1;
+    let tapElapsed = 100; // seconds since last tap (large => no ripple)
+    // Hover presence, smoothed toward 1 while the cursor is over the visual.
+    let hoverAmt = 0;
+    // Mic level + voice-mode presence, both smoothed for a fluid reaction.
+    let micLevel = 0;
+    let voiceAmt = 0;
 
     const frame = () => {
       const now = performance.now();
@@ -222,6 +262,33 @@ export default function ShaderCanvas({
       // — so the comets clearly rotate slower in listening/ready than speaking.
       const spinSpeed = 0.2 + 1.1 * curReact + 1.0 * curFlow + 0.55 * curLoad;
       tSpin += dt * (reduced ? 0.07 : 1.0) * spinSpeed;
+
+      // Tap ripple: detect a new tap, snap its position, and reset the timer.
+      const tp = tapRef.current;
+      if (tp && tp.id !== lastTapId) {
+        lastTapId = tp.id;
+        tapElapsed = 0;
+        program.uniforms.uTap.value.set(tp.x, tp.y);
+      }
+      tapElapsed += dt;
+      program.uniforms.uTapTime.value = tapElapsed;
+
+      // Hover: follow the cursor and ease presence in/out (no React re-render —
+      // the position lives in a ref updated on mousemove).
+      const hv = hoverPropRef.current?.current;
+      const hTarget = hv && hv.active ? 1 : 0;
+      hoverAmt += (hTarget - hoverAmt) * 0.12;
+      if (hv && hv.active) program.uniforms.uHover.value.set(hv.x, hv.y);
+      program.uniforms.uHoverAmt.value = hoverAmt;
+
+      // Voice mode: ease presence in/out and smooth the live mic level so the
+      // visual reacts fluidly to real audio rather than jumping on every sample.
+      const mc = micPropRef.current?.current;
+      const vTarget = mc && mc.active ? 1 : 0;
+      voiceAmt += (vTarget - voiceAmt) * 0.1;
+      micLevel += ((mc ? mc.level : 0) - micLevel) * 0.35;
+      program.uniforms.uVoice.value = voiceAmt;
+      program.uniforms.uMic.value = micLevel;
 
       // Lerp each colour toward its target; count eases (crossfade).
       const ct = colorTarget.current;
@@ -262,6 +329,14 @@ export default function ShaderCanvas({
         program.uniforms.uCol1.value.set(...cur1);
         program.uniforms.uCol2.value.set(...cur2);
         program.uniforms.uCount.value = curCount;
+        // Don't replay the most recent tap when this viz becomes active again.
+        lastTapId = tapRef.current ? tapRef.current.id : -1;
+        tapElapsed = 100;
+        program.uniforms.uTapTime.value = tapElapsed;
+        hoverAmt = 0;
+        program.uniforms.uHoverAmt.value = 0;
+        micLevel = 0;
+        voiceAmt = 0;
         last = performance.now();
         frame();
       },

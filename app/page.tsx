@@ -19,7 +19,7 @@ export type Viz = "orb" | "glow" | "sphere" | "ring" | "aura" | "wave";
 type Theme = "light" | "dark";
 
 export default function Page() {
-  const [viz, setViz] = useState<Viz>("orb");
+  const [viz, setViz] = useState<Viz>("glow");
   const [state, setState] = useState<AgentState>("speaking");
   const [colors, setColors] = useState<Color[]>([DEFAULT_COLOR]); // 1-3 full colours
   // Stable per-colour ids so colour rows can animate in/out by identity.
@@ -40,8 +40,6 @@ export default function Page() {
   const [vizSize, setVizSize] = useState(1);
   const hostRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
-  // Once the user flips the toggle, stop following the OS so their choice sticks.
-  const userOverrodeTheme = useRef(false);
 
   // Track viewport so controls sit below the phone on desktop, in a bottom
   // sheet on mobile. (Starts false so server + first client render match.)
@@ -53,14 +51,13 @@ export default function Page() {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  // Follow the OS colour scheme on load AND keep in sync when it changes live
-  // (e.g. iOS auto day/night), until the user manually overrides via the toggle.
+  // Follow the OS colour scheme on load AND whenever it changes live (e.g. iOS
+  // auto day/night, or the user flipping system appearance). The manual toggle
+  // sets a temporary preference, but a later OS change always takes back over.
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     setTheme(mq.matches ? "dark" : "light");
-    const onChange = (e: MediaQueryListEvent) => {
-      if (!userOverrodeTheme.current) setTheme(e.matches ? "dark" : "light");
-    };
+    const onChange = (e: MediaQueryListEvent) => setTheme(e.matches ? "dark" : "light");
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
@@ -120,10 +117,7 @@ export default function Page() {
   const openSheet = () => tweenScroll(hostRef.current?.clientHeight ?? 0);
   const closeSheet = () => tweenScroll(0);
 
-  const toggleTheme = () => {
-    userOverrodeTheme.current = true;
-    setTheme((t) => (t === "light" ? "dark" : "light"));
-  };
+  const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"));
   const setColorAt = (i: number, color: Color) =>
     setColors((c) => c.map((col, idx) => (idx === i ? color : col)));
   const addColor = () => {

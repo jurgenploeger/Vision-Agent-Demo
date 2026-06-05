@@ -16,8 +16,8 @@
   transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1),
     height 0.5s cubic-bezier(0.4, 0, 0.2, 1),
     border-radius 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-    padding 0.5s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s ease,
-    outline-color 0.4s ease;
+    padding 0.5s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease,
+    outline-color 0.2s ease;
 }
 
 .screen {
@@ -29,7 +29,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: background 0.4s ease,
+  transition: background 0.2s ease,
     border-radius 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -52,11 +52,17 @@
   padding-left: max(16px, 18%);
   padding-right: max(16px, 18%);
 }
+/* Match the message list to the composer's width on the wider desktop window so
+   bubbles line up with the composer edges instead of spanning the full width. */
+.screenDesktop .messages {
+  padding-left: max(16px, 18%);
+  padding-right: max(16px, 18%);
+}
 
 /* While actively dragging a resize handle, kill the morph transition so the
    window tracks the pointer immediately instead of easing behind it. */
 .resizing {
-  transition: background 0.4s ease, outline-color 0.4s ease;
+  transition: background 0.2s ease, outline-color 0.2s ease;
 }
 
 /* Resize handles (desktop variant only) — let you grow/shrink the window even
@@ -144,8 +150,10 @@
   color: var(--text-soft);
   transition: background 0.2s ease;
 }
-.iconBtn:hover {
-  background: var(--control-bg);
+@media (hover: hover) {
+  .iconBtn:hover {
+    background: var(--control-bg);
+  }
 }
 .iconBtn:active {
   transform: scale(0.94);
@@ -157,7 +165,7 @@
 
 .header {
   position: relative;
-  z-index: 2; /* keep the title above the aura glowing behind it */
+  z-index: 4; /* above the frosted chat band + orb so the title/buttons stay crisp */
   flex: none;
   display: flex;
   align-items: center;
@@ -208,7 +216,7 @@
   text-align: center;
   white-space: nowrap; /* always one line, even at the smallest size */
   font-family: var(--font-display), sans-serif;
-  font-size: 19px;
+  font-size: 21px;
   font-weight: 400; /* regular weight */
   line-height: 1.3;
   letter-spacing: -0.01em;
@@ -293,7 +301,153 @@
   width: calc(min(100cqmin, 360px) * var(--viz-scale, 1));
   height: calc(min(100cqmin, 360px) * var(--viz-scale, 1));
   transform-origin: 50% 50%;
-  transition: width 0.18s ease, height 0.18s ease;
+  transition: width 0.18s ease, height 0.18s ease,
+    transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+/* ---------- Chat / message view ---------- */
+
+/* In chat mode the full-screen visual layer stops intercepting pointer events so
+   the message list below can scroll, and it rises above the messages so the
+   docked orb stays visible on top. */
+.vizDocked {
+  z-index: 3; /* above the frosted band so the orb stays crisp */
+  pointer-events: none;
+}
+
+/* The orb morphs from big-and-centred to a compact presence pinned near the top
+   (best practice: the assistant shrinks to an avatar once the chat begins).
+   translateY moves the centre to ~118px from the top regardless of screen height. */
+.bouncerDocked {
+  transform: translateY(calc(118px - 50cqh)) scale(0.34);
+}
+
+.messages {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 128px 16px 150px; /* top clears the orb's solid backdrop; bottom clears the composer + its (softer, taller) frosted band */
+  -webkit-overflow-scrolling: touch;
+  /* Hide the scrollbar (still scrollable) so the chat reads as a clean surface. */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* old Edge */
+  animation: messagesIn 0.4s ease;
+}
+.messages::-webkit-scrollbar {
+  display: none; /* Chrome / Safari */
+}
+
+/* Frosted bands top + bottom: messages blur and fade into a solid background as
+   they scroll up under the orb or down behind the composer. Sit above the
+   messages (z1) but below the orb (z3) and header (z4), which stay crisp. */
+.chatFrost,
+.chatFrostBottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  pointer-events: none;
+  backdrop-filter: blur(8px) saturate(108%);
+  -webkit-backdrop-filter: blur(8px) saturate(108%);
+}
+.chatFrost {
+  top: 0;
+  height: 268px;
+  /* Opaque screen-bg extends DOWN past the orb, so the agent always sits on a
+     clean white/black background, then eases off over a long, soft fade to
+     reveal the messages below (a gentle solid → transparent ramp). */
+  background: linear-gradient(to bottom, var(--screen-bg) 186px, transparent 268px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 186px, transparent 268px);
+  mask-image: linear-gradient(to bottom, #000 186px, transparent 268px);
+}
+.chatFrostBottom {
+  bottom: 0;
+  height: 140px;
+  background: linear-gradient(to top, var(--screen-bg) 54px, transparent 140px);
+  -webkit-mask-image: linear-gradient(to top, #000 54px, transparent 140px);
+  mask-image: linear-gradient(to top, #000 54px, transparent 140px);
+}
+
+/* Non-interactive layout spacer that balances the header so the title stays
+   centred — unlike .iconBtn it has no hover/press affordance (no ghost button). */
+.iconSpacer {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+}
+@keyframes messagesIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.msg {
+  max-width: 78%;
+  padding: 9px 14px;
+  border-radius: 18px;
+  font-size: 14px;
+  line-height: 1.36;
+  letter-spacing: 0.005em;
+  word-break: break-word;
+  animation: msgIn 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+  /* Fade colours in step with the screen background on theme toggle so the
+     whole list changes as one unit (no lagging behind the rest of the UI). */
+  transition: background 0.2s ease, color 0.2s ease;
+}
+@keyframes msgIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.msgUser {
+  align-self: flex-end;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-bottom-right-radius: 6px;
+}
+.msgAgent {
+  align-self: flex-start;
+  background: var(--control-bg);
+  color: var(--text);
+  border-bottom-left-radius: 6px;
+}
+
+/* Header right-side button group (theme toggle + new-chat pencil). */
+.headerRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .messages,
+  .msg {
+    animation: none;
+  }
+}
+
+/* Wraps the crossfading shader layers so the tap-bounce can scale ONLY the
+   visual, leaving the greeting (a sibling in the bouncer) unmoved. Fills the
+   bouncer; the bounce transform is applied here via the Web Animations API. */
+.vizStack {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
   will-change: transform;
 }
 
@@ -314,10 +468,13 @@
 /* ---------- Bottom dock ---------- */
 
 .dock {
-  position: relative;
-  z-index: 3; /* the composer sits atop the interface; the aura is behind it */
-  flex: none;
-  margin-top: auto; /* pin to the bottom (the viz layer is absolute, out of flow) */
+  /* Absolute at the bottom so the message list fills behind it and messages can
+     scroll under the composer (where the bottom frosted band blurs them). */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3; /* the composer sits atop the interface + frosted band */
   display: flex;
   align-items: center;
   gap: 10px;
@@ -340,13 +497,27 @@
   box-shadow: inset 0 0 0 1px var(--composer-edge), var(--composer-shadow);
   color: var(--text);
   cursor: pointer;
-  transition: background 0.2s ease, transform 0.16s ease;
+  transition: background 0.2s ease, transform 0.18s ease,
+    width 0.34s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease,
+    margin-right 0.34s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.composerPlus:hover {
-  background: var(--control-bg);
+@media (hover: hover) {
+  .composerPlus:hover {
+    background: var(--control-bg);
+  }
 }
 .composerPlus:active {
   transform: scale(0.92);
+}
+/* While recording: collapse the + so the composer fills the full width. The
+   negative margin cancels the dock's 10px gap so the field slides over cleanly. */
+.composerPlusHidden {
+  width: 0;
+  opacity: 0;
+  transform: scale(0.5);
+  margin-right: -10px;
+  pointer-events: none;
+  overflow: hidden;
 }
 
 .field {
@@ -400,11 +571,93 @@
   color: var(--text); /* white in dark mode; stays legible in light mode */
   transition: transform 0.16s ease, background 0.2s ease;
 }
-.micInline:hover {
-  background: var(--control-bg);
+@media (hover: hover) {
+  .micInline:hover {
+    background: var(--control-bg);
+  }
 }
 .micInline:active {
   transform: scale(0.92);
+}
+
+/* ---------- Voice / recording mode (composer turns into a live bar) ---------- */
+
+.fieldVoice {
+  gap: 10px;
+  /* Gentle pop as the composer switches into voice mode. */
+  animation: voiceFieldIn 0.34s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes voiceFieldIn {
+  from {
+    transform: scale(0.97);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Live audio waveform — fills the composer between the record dot and stop. */
+.waveCanvas {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  display: block;
+  color: var(--text-soft); /* bar colour, read by the canvas via currentColor */
+  /* Bars rise into place when voice mode opens. */
+  animation: waveIn 0.42s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transform-origin: center;
+}
+@keyframes waveIn {
+  from {
+    opacity: 0;
+    transform: scaleY(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+/* Pulsing red record dot. */
+.recDot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #ff3b30;
+  box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.5);
+  animation: recPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes recPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.45);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 0 5px rgba(255, 59, 48, 0);
+  }
+}
+
+/* The mic button while recording: solid accent so it reads as the active stop. */
+.micActive {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+@media (hover: hover) {
+  .micActive:hover {
+    background: var(--accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recDot,
+  .fieldVoice,
+  .waveCanvas {
+    animation: none;
+  }
 }
 
 /* Inline send button — appears at the right of the field once there's text. */
@@ -446,7 +699,7 @@
   background: var(--accent);
   color: var(--accent-fg);
   box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.5);
-  transition: transform 0.18s ease, background 0.4s ease, color 0.4s ease,
+  transition: transform 0.18s ease, background 0.2s ease, color 0.2s ease,
     box-shadow 0.2s ease;
 }
 .mic:hover {

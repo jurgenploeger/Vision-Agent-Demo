@@ -84,7 +84,7 @@ body {
   font-feature-settings: "ss02", "ss03", "ss04", "ss06";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  transition: background 0.4s ease, color 0.4s ease;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 button {

@@ -214,6 +214,7 @@ export default function Controls({
           color={colors[editing]}
           onChange={(c) => setColorAt(editing, c)}
           onClose={closePicker}
+          onCloseStart={() => onPickerOpenChange?.(false)}
           isMobile={isMobile}
           anchorRect={anchorRect}
           label={`Color ${editing + 1}`}

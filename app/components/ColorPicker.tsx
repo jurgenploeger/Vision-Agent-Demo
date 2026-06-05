@@ -204,6 +204,7 @@ export default function ColorPickerOverlay({
   color,
   onChange,
   onClose,
+  onCloseStart,
   isMobile,
   anchorRect,
   label,
@@ -211,6 +212,9 @@ export default function ColorPickerOverlay({
   color: Color;
   onChange: (c: Color) => void;
   onClose: () => void;
+  // Fires the moment a close begins (before the glide-down completes) so the
+  // settings sheet behind can un-recede in sync rather than after the glide.
+  onCloseStart?: () => void;
   isMobile: boolean;
   anchorRect: DOMRect | null;
   label: string;
@@ -296,12 +300,14 @@ export default function ColorPickerOverlay({
     const p = range > 0 ? el.scrollTop / range : 1; // 1 = open, 0 = dismissed
     if (p < 0.15) {
       closingRef.current = true;
+      onCloseStart?.();
       onClose();
     }
   };
   const closeWithScroll = () => {
     if (closingRef.current) return;
     closingRef.current = true;
+    onCloseStart?.(); // un-recede the sheet behind now, while this one glides down
     tweenTo(0, onClose); // glide the sheet down, then unmount
   };
 
