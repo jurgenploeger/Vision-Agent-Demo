@@ -126,6 +126,18 @@ const SCHEMES: Record<number, number[][]> = {
     [0, 150, 210], // split-complementary
     [0, 30, 320], // analogous + accent
   ],
+  4: [
+    [0, 30, 60, 90], // analogous
+    [0, 90, 180, 270], // tetradic (square)
+    [0, 60, 180, 240], // double complementary
+    [0, 120, 240, 30], // triad + accent
+  ],
+  5: [
+    [0, 30, 60, 90, 120], // analogous sweep
+    [0, 72, 144, 216, 288], // pentadic (even wheel)
+    [0, 150, 210, 30, 330], // split-complement + accents
+    [0, 120, 240, 60, 300], // triad + bridges
+  ],
 };
 
 // Random base hue + a harmony scheme; S/V from vividColor so shuffles keep the

@@ -257,8 +257,27 @@ export default function ColorPickerOverlay({
   // the bottom of a scroll host with two snap stops (dismissed / open); the
   // entrance and tap/close are tweened so they glide instead of snapping.
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const closingRef = useRef(false);
   const tweenRef = useRef<number | null>(null);
+
+  // Expose this sheet's height so the Settings sheet behind it can recede to peek
+  // a fixed 12px above this one — independent of either sheet's content height
+  // (the Settings sheet grows with its controls). Consumed by .sheet2Receded.
+  useLayoutEffect(() => {
+    if (!isMobile || !mounted) return;
+    const root = document.documentElement;
+    const measure = () => {
+      const h = sheetRef.current?.offsetHeight;
+      if (h) root.style.setProperty("--picker-sheet-h", `${h}px`);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      root.style.removeProperty("--picker-sheet-h");
+    };
+  }, [isMobile, mounted]);
   const tweenTo = (to: number, done?: () => void) => {
     const el = scrollRef.current;
     if (!el) return;
@@ -335,7 +354,7 @@ export default function ColorPickerOverlay({
             aria-label="Close"
             onClick={closeWithScroll}
           />
-          <div className={styles.sheet} role="dialog" aria-label={label}>
+          <div className={styles.sheet} role="dialog" aria-label={label} ref={sheetRef}>
             <div className={styles.sheetHead}>
               <span className={styles.sheetTitle}>{label}</span>
               <button

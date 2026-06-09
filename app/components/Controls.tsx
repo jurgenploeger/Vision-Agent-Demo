@@ -37,6 +37,8 @@ type Props = {
   addColor: () => void;
   removeColor: (i: number) => void;
   shuffle: () => void;
+  expressivity: number; // how lively the motion is (multiplier on every state)
+  setExpressivity: (e: number) => void;
   size: number; // visualization size multiplier
   setSize: (s: number) => void;
   isMobile: boolean; // picker shows as a stacked sheet on mobile, popover on desktop
@@ -48,6 +50,11 @@ type Props = {
 // starts dead-centre on load.
 const SIZE_MIN = 0.7;
 const SIZE_MAX = 1.3;
+
+// Bounds for the Expressivity slider — 0 is near-still, 1 is the tuned default
+// (handle dead-centre), 2 is twice as animated.
+const EXPRESSIVITY_MIN = 0;
+const EXPRESSIVITY_MAX = 2;
 
 // Matches the swatch enter/exit animation duration in page.module.css.
 const SWATCH_ANIM_MS = 300;
@@ -63,6 +70,8 @@ export default function Controls({
   addColor,
   removeColor,
   shuffle,
+  expressivity,
+  setExpressivity,
   size,
   setSize,
   isMobile,
@@ -153,6 +162,22 @@ export default function Controls({
         </div>
       </div>
 
+      {/* Expressivity — scales how much each state animates (amplitude + a gentle
+          speed lift). 0 is near-still, 1 the tuned default, 2 twice as lively. */}
+      <div className={styles.control}>
+        <span className={styles.controlLabel}>Expressivity</span>
+        <input
+          className={styles.slider}
+          type="range"
+          min={EXPRESSIVITY_MIN}
+          max={EXPRESSIVITY_MAX}
+          step={0.01}
+          value={expressivity}
+          onChange={(e) => setExpressivity(Number(e.target.value))}
+          aria-label="Animation expressivity"
+        />
+      </div>
+
       {/* Size — scales the orb / glow / ring / wave (the aura fills the screen). */}
       <div className={styles.control}>
         <span className={styles.controlLabel}>Size</span>
@@ -202,12 +227,12 @@ export default function Controls({
             );
           })}
 
-          {/* Add-colour chip; collapses away at the 3-colour max. */}
+          {/* Add-colour chip; collapses away at the 5-colour max. */}
           <button
-            className={`${styles.addSwatch} ${colors.length < 3 ? "" : styles.addSwatchHidden}`}
+            className={`${styles.addSwatch} ${colors.length < 5 ? "" : styles.addSwatchHidden}`}
             aria-label="Add color"
-            aria-hidden={colors.length >= 3}
-            tabIndex={colors.length < 3 ? 0 : -1}
+            aria-hidden={colors.length >= 5}
+            tabIndex={colors.length < 5 ? 0 : -1}
             onClick={addColor}
           >
             <Plus size={16} weight="bold" />

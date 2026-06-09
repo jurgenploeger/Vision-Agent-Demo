@@ -53,9 +53,31 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   height: 32px;
   margin-bottom: 28px;
   color: var(--text); /* the wordmark uses currentColor; the mark stays blue */
+}
+
+/* Subtle reset in the panel's top-right corner — restores the visualization
+   settings to their defaults. Quiet by default, firms up on hover. */
+.panelReset {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  transition: color 0.2s ease, background 0.2s ease, transform 0.16s ease;
+}
+.panelReset:hover {
+  color: var(--text);
+  background: var(--control-bg);
+}
+.panelReset:active {
+  transform: scale(0.92);
 }
 
 /* The settings stack; scrolls within the panel if it ever outgrows it. */
@@ -102,8 +124,8 @@
    bottom-left corner. Hidden (and non-interactive) while the panel is open. */
 .panelExpand {
   position: fixed;
-  left: 16px;
-  bottom: 16px;
+  left: 24px;
+  bottom: 24px;
   z-index: 40;
   display: grid;
   place-items: center;
@@ -113,7 +135,6 @@
   color: var(--text-soft);
   background: var(--device-bg);
   border: 1px solid var(--edge);
-  box-shadow: var(--composer-shadow);
   opacity: 0;
   transform: scale(0.9);
   pointer-events: none;
@@ -128,6 +149,33 @@
 .panelExpand:hover {
   transform: translateY(-1px);
   background: var(--control-bg);
+}
+
+/* The Stream wordmark, fixed in the page's top-left corner once the panel is
+   collapsed. Mirrors the theme toggle (top-right): same top offset + height so
+   the wordmark sits on the same line, vertically centred against the toggle.
+   Hidden while the panel is open (the panel's own brand covers this); fades in
+   once collapsed. */
+.brandFixed {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  z-index: 40;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  color: var(--text);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.24s ease 0.08s;
+}
+.brandFixedShown {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brandFixed {
+    transition: opacity 0.2s ease;
+  }
 }
 
 /* The empty space to the right of the panel; the app screen (with the device
@@ -229,17 +277,17 @@
 
 .themeToggle {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: 24px;
+  right: 24px;
   z-index: 40;
   display: grid;
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 999px;
+  border-radius: 10px;
   color: var(--text-soft);
   background: var(--device-bg);
-  box-shadow: inset 0 0 0 1px var(--edge);
+  border: 1px solid var(--edge);
   transition: background 0.2s ease, transform 0.16s ease;
 }
 .themeToggle:hover {
@@ -345,7 +393,12 @@
     filter 0.34s ease, border-radius 0.34s ease;
 }
 .sheet2Receded {
-  transform: scale(0.93) translateY(-10px);
+  /* Slide down so only 12px peeks above the colour sheet stacked in front of it.
+     translateY(100%) is this sheet's own height, so subtracting the colour
+     sheet's height (--picker-sheet-h, measured in ColorPicker) leaves its top
+     12px above the colour sheet's top — a constant peek no matter how tall the
+     Settings content grows. Scaled a touch (origin top) for the iOS depth look. */
+  transform: translateY(calc(100% - var(--picker-sheet-h, 60vh) - 12px)) scale(0.93);
   filter: brightness(0.82);
   border-radius: 16px 16px 0 0;
 }
