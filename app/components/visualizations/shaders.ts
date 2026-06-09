@@ -19,8 +19,6 @@ void main() {
 const HEADER = /* glsl */ `
 precision highp float;
 uniform float uTime;
-uniform float uSpin;       // orb comet-spin angle: integrated with a STRONGLY
-                           // state-dependent speed (slow when idle/listening)
 uniform vec3  uCol0;       // colour 1 as HSV: (hue 0-1, sat 0-1, val 0-1)
 uniform vec2  uResolution; // drawing-buffer pixels
 // Conversational-state drivers (lerped on the JS side). See states.ts.
@@ -239,7 +237,10 @@ void main() {
   // calmly, listening gently lifts, thinking slowly rotates (uFlow), connecting
   // pulses (uLoad), speaking surges (speech).
   float energy = 0.10 + 0.28 * uReact + 0.18 * uFlow + 0.22 * uLoad + 0.42 * speech;
-  float ct = t * 0.13 + uFlowSpin * 0.05;  // thinking flows just a touch faster
+  // Expressivity gives the liquid an extra speed lift on top of the global state
+  // speed: 0.8x drift at min, 1x at the default, 1.2x at max (so cranking it up
+  // makes the colour masses fold and flow noticeably faster).
+  float ct = (t * 0.13 + uFlowSpin * 0.05) * (0.8 + 0.2 * uExpressivity);  // thinking flows just a touch faster
   float amp = 0.36 + 0.24 * energy;        // gentle turbulence; keeps the masses sleek
   vec2 w1 = vec2(snoise(vec3(p * 0.65, ct)),
                  snoise(vec3(p * 0.65 + 11.0, ct)));
@@ -356,7 +357,7 @@ void main() {
   // Interior turbulence energy. Speech contributes only a LITTLE here (was 0.50) so
   // the interior stays calm + fluid while talking — the speaking motion is carried
   // by the smooth size pulse below, not by jittery interior churn (which glitched).
-  float energy = 0.06 + 0.30 * uReact + 0.18 * uFlow + 0.28 * uLoad + 0.06 * speechSmooth;
+  float energy = 0.12 + 0.30 * uReact + 0.18 * uFlow + 0.28 * uLoad + 0.06 * speechSmooth;
   // Size: the glow scales in/out with the speaking rate (speechSmooth) — the primary
   // speaking motion — plus a slow connecting breath and a gentle listening wobble.
   // Idle/thinking hold a steady size (their motion is the interior swirl).
@@ -371,8 +372,8 @@ void main() {
   // read as moving WAVES inside the glow (livelier while speaking).
   vec2 P = q / R;
   float pl = length(P);
-  float nt = t * 0.10 + uFlowSpin * 0.05;     // thinking flows just a touch faster
-  float nAmp = 0.12 + 0.18 * energy;          // calmer warp so speaking stays fluid
+  float nt = t * 0.15 + uFlowSpin * 0.05;     // a livelier base drift (thinking adds more)
+  float nAmp = 0.20 + 0.28 * energy;          // stronger domain-warp => more flowing, airy masses
   vec2 sp = P + nAmp * vec2(snoise(vec3(P * 0.7, nt)),
                             snoise(vec3(P * 0.7 + 4.7, nt)));
   // Concentric ripple displaced tangentially — but faded out near the centre,
@@ -450,9 +451,11 @@ void main() {
   float halo = exp(-pow(max(r - R * 0.8, 0.0) / 0.09, 2.0));
   float haloA = halo * (mix(0.05, 0.10, uDark) + 0.05 * uReact);
   // Airy body: the gaps between colour are semi-transparent so the background
-  // shows through, and the drifting colour waves are the more solid parts.
+  // shows through, and the drifting colour waves are the more solid parts. A low
+  // base fill + strongly wave-driven body leaves lots of "air" inside, so the
+  // glow reads as flowing wisps rather than a solid ball.
   float waves = clamp(b0 + 0.8 * b1, 0.0, 1.0);
-  float bodyA = clamp(body * (0.30 + 0.5 * waves + 0.12 * core) * (0.92 + 0.08 * fres), 0.0, 1.0);
+  float bodyA = clamp(body * (0.15 + 0.60 * waves + 0.06 * core) * (0.92 + 0.08 * fres), 0.0, 1.0);
   float fade = mix(1.0, 0.45 + 0.35 * sin(t * 2.0), uLoad);
   vec3 pm = col * bodyA + haloCol * haloA * (1.0 - bodyA);
   float al = bodyA + haloA * (1.0 - bodyA);
@@ -482,10 +485,11 @@ void main() {
   // thinking and connecting each lift it via their own driver; speaking peaks.
   // Drives ripple amplitude + silhouette wobble so every state reads distinct.
   float energy = 0.32 + 0.40 * uReact + 0.42 * uFlow + 0.26 * uLoad + 0.55 * speech;
-  // Expressivity also sets how MANY ripples there are: it scales the meridian-fold
-  // frequencies (and the silhouette folds), so a low setting reads as a few broad
-  // folds and a high setting as many tighter ones. 1 = the tuned default.
-  float fexp = 0.7 + 0.3 * uExpressivity;   // 0.7x folds at min, 1x default, 1.3x max
+  // Expressivity sets the fold WIDTH: turning it up LOWERS the fold frequency so
+  // the folds get wider and — together with the bigger amplitude (the state
+  // drivers are expressivity-scaled) — read as fewer, BIGGER bulges while speaking
+  // rather than lots of tiny ones. 1 = the tuned default.
+  float fexp = 1.15 - 0.15 * uExpressivity;  // 1.15x folds at min, 1x default, 0.85x max
 
   // Globe spin (left -> right), shared by the silhouette ripple AND the surface
   // folds below so the edge bulges track the waves rolling across the surface.
@@ -916,10 +920,12 @@ void main() {
   float env = exp(-pow(x / sigma, 2.0));
   // State-driven amplitude, like the Wave: calm + low when idle/ready, a clear
   // ripple while listening/thinking, and a full entangled swell when speaking.
-  // Tuned so the tallest crest (~1.6 * amp, with the drift term) stays well
-  // inside the canvas half-height (0.5) even at the maximum Size — the peaks were
-  // overshooting the clip region and reading too tall while speaking.
   float amp = 0.04 + 0.05 * uReact + 0.05 * uFlow + 0.04 * uLoad + 0.15 * speech;
+  // The tallest crest is ~1.6 * amp (the two sines + the drift term). Expressivity
+  // scales the state drivers up (so uReact/speech can run high), which pushed the
+  // crests past the canvas half-height (0.5) and clipped them. Cap amp so the
+  // crest + strand thickness always stays inside the canvas at any expressivity.
+  amp = min(amp, 0.27);
 
   float g1 = clamp(uCount - 1.0, 0.0, 1.0);
   float g2 = clamp(uCount - 2.0, 0.0, 1.0);
@@ -990,6 +996,109 @@ void main() {
   float edgeFade = smoothstep(0.5, 0.30, abs(x));
   float scale = (0.95 + 0.4 * speech) * uBright * edgeFade;
   float a = clamp(covMax * scale, 0.0, 1.0);
+  gl_FragColor = vec4(col * a, a);
+}
+`;
+
+/* ------------------------------------------------------------------ */
+/* BARS — a classic linear audio EQ: a centred row of vertical rounded  */
+/* capsules whose heights react per state. Idle rests as short nubs;     */
+/* connecting sweeps a bump across them like a loader; thinking rolls a   */
+/* travelling wave; listening lifts gently; speaking erupts with the talk */
+/* envelope. The palette is distributed across the bars (left -> right).  */
+/* ------------------------------------------------------------------ */
+export const BARS_FRAGMENT = HEADER + SNOISE + COORDS + /* glsl */ `
+// SDF of a vertical capsule centred at the origin: a segment from (0,-h) to
+// (0,+h) with radius r. Negative inside.
+float vCapsule(vec2 p, float h, float r) {
+  p.y -= clamp(p.y, -h, h);
+  return length(p) - r;
+}
+void main() {
+  vec2 q = coords();
+  float t = uTime;
+  float aa = 1.6 / min(uResolution.x, uResolution.y);
+
+  // Speaking uses the irregular talk envelope (phrases + pauses); listening uses a
+  // steady, gentle breath instead — so it reads as attentive, not like talking.
+  float speak = smoothstep(0.6, 1.0, uReact);
+  float speech = uReact * mix(0.55 + 0.25 * sin(t * 1.6), speechEnv(t), speak);
+  speech = mix(speech, uMic, uVoice);   // voice mode: react to the real mic level
+
+  // --- Geometry: a fixed centred row of thin bars with constant spacing. ---
+  float N = 8.0;                           // fixed count
+  float span = 0.60;                       // total width of the row
+  float gap = span / (N - 1.0);            // constant spacing between bar centres
+  float bw  = 0.030;                       // thin bars (also the dot radius when short)
+  // Nearest bar to this pixel.
+  float fx = (q.x + span * 0.5) / gap;
+  float idx = floor(fx + 0.5);
+  if (idx < 0.0 || idx > N - 1.0) { gl_FragColor = vec4(0.0); return; }
+  float u  = idx / max(N - 1.0, 1.0);      // 0..1 position of this bar
+  float bx = -span * 0.5 + idx * gap;      // this bar's centre x
+
+  // --- Per-bar height (half-height in coords units) ---
+  // A centred hump so the middle bars stand tallest (the classic EQ silhouette).
+  float window = 0.5 + 0.5 * sin(u * PI);
+  // Each bar gets its own wiggle so the row isn't a rigid shape.
+  float perBar = 0.5 + 0.5 * snoise(vec3(idx * 0.9, t * 1.6, 0.0));
+  // Speaking gate (1 while speaking, ~0 otherwise) — only SPEAKING grows tall
+  // bars; ready / listening / thinking / connecting stay low so they read as dots.
+  float speakGate = smoothstep(0.45, 0.85, uReact);
+  // Speaking ebbs in pauses (talk envelope).
+  float talk = 0.45 + 0.55 * speechEnv(t);
+  // Thinking: a travelling wave rolling left -> right across the bars.
+  float flowWave = 0.4 + 0.6 * (0.5 + 0.5 * sin(u * 6.0 - t * 3.0));
+  // Connecting: a single bump sweeping across like a loader.
+  float sweep = fract(t * 0.4);
+  float loadBump = exp(-pow((u - sweep) / 0.14, 2.0));
+
+  // Tall reactive bars ONLY while speaking; the other states keep tiny heights so
+  // the capsules render as dots. A little life keeps the dots from being dead.
+  float idleLife = 0.012 * (0.5 + 0.5 * sin(t * 1.3 + idx * 0.7));
+  float h = 0.235 * window * perBar * speech * speakGate * talk  // speaking bars
+          + idleLife * (1.0 - speakGate)                          // gentle dot breath
+          + 0.035 * uFlow * flowWave                              // thinking: subtle
+          + 0.050 * uLoad * loadBump;                             // connecting: subtle sweep
+  // Voice mode lifts the bars with the live mic level (centre bars rise most).
+  h += uVoice * uMic * 0.18 * (0.5 + 0.5 * window);
+  // Tap / hover: bars near the pointer's column erupt (sampled at the bar centre).
+  h += 0.10 * max(poke(vec2(bx, 0.0)), 0.0);
+  h = clamp(h, 0.0, 0.40);
+
+  // Radius is CONSTANT, so moving between states is a smooth grow/shrink of the
+  // height with the gaps always preserved (no scaling / merging). When a bar is
+  // short the constant-radius capsule naturally reads as a round dot.
+  float rad = bw;
+
+  float d = vCapsule(vec2(q.x - bx, q.y), h, rad);
+  float bar = 1.0 - smoothstep(-aa, aa, d);
+  if (bar <= 0.0) { gl_FragColor = vec4(0.0); return; }
+
+  // --- Colour: a smooth gradient that FLOWS through the bars (rather than one
+  // flat colour per bar). The sample coordinate mixes the bar's x-position with
+  // the pixel's height and drifts with time, so multiple colours read as a single
+  // gradient sliding inside the bars. Wide bands keep it a smooth blend. ---
+  vec3 k0 = vivid(uCol0);
+  vec3 k1 = vivid(uCol1);
+  vec3 k2 = vivid(uCol2);
+  vec3 k3 = vivid(uCol3);
+  vec3 k4 = vivid(uCol4);
+  float seg = 1.0 / max(uCount, 1.0);
+  float bandW = seg * 1.05;                            // wide => gradient, not bands
+  float gpos = clamp(u * 0.7 + (q.y / 0.42) * 0.18 + 0.14 * sin(t * 0.5) + 0.15, 0.0, 1.0);
+  float w0 = exp(-pow((gpos - 0.5 * seg) / bandW, 2.0));
+  float w1 = exp(-pow((gpos - 1.5 * seg) / bandW, 2.0)) * clamp(uCount - 1.0, 0.0, 1.0);
+  float w2 = exp(-pow((gpos - 2.5 * seg) / bandW, 2.0)) * clamp(uCount - 2.0, 0.0, 1.0);
+  float w3 = exp(-pow((gpos - 3.5 * seg) / bandW, 2.0)) * clamp(uCount - 3.0, 0.0, 1.0);
+  float w4 = exp(-pow((gpos - 4.5 * seg) / bandW, 2.0)) * clamp(uCount - 4.0, 0.0, 1.0);
+  vec3 col = (k0 * w0 + k1 * w1 + k2 * w2 + k3 * w3 + k4 * w4) / (w0 + w1 + w2 + w3 + w4 + 1e-4);
+  col = saturate3(col, 1.2);
+  col = desat(col, uSat);
+
+  // Connecting breathes the overall opacity ("not ready yet").
+  float fade = mix(1.0, 0.5 + 0.4 * sin(t * 2.0), uLoad);
+  float a = bar * uBright * fade;
   gl_FragColor = vec4(col * a, a);
 }
 `;

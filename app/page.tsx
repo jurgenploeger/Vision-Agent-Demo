@@ -23,7 +23,7 @@ import {
   shuffleColors,
 } from "./components/color";
 
-export type Viz = "orb" | "glow" | "sphere" | "ring" | "aura" | "wave";
+export type Viz = "orb" | "glow" | "sphere" | "ring" | "bars" | "aura" | "wave";
 
 type Theme = "light" | "dark";
 
@@ -205,9 +205,9 @@ export default function Page() {
             <div className={styles.panelBrand}>
               <StreamLogo />
               <button
-                className={`${styles.panelReset} ${settingsChanged ? "" : styles.panelResetHidden}`}
+                className={`${styles.panelReset} ${styles.tip} ${styles.tipRight} ${settingsChanged ? "" : styles.panelResetHidden}`}
                 aria-label="Reset settings"
-                title="Reset settings"
+                data-tip="Reset settings"
                 aria-hidden={!settingsChanged}
                 tabIndex={settingsChanged && !panelCollapsed ? 0 : -1}
                 onClick={resetSettings}
@@ -221,8 +221,9 @@ export default function Page() {
             </div>
 
             <button
-              className={styles.panelCollapse}
+              className={`${styles.panelCollapse} ${styles.tip} ${styles.tipRight}`}
               aria-label="Collapse panel"
+              data-tip="Collapse sidebar"
               tabIndex={panelCollapsed ? -1 : 0}
               onClick={() => setPanelCollapsed(true)}
             >
@@ -241,8 +242,9 @@ export default function Page() {
 
           {/* Expand button — bottom-left of the page, only while collapsed. */}
           <button
-            className={`${styles.panelExpand} ${panelCollapsed ? styles.panelExpandShown : ""}`}
+            className={`${styles.panelExpand} ${styles.tip} ${styles.tipRight} ${panelCollapsed ? styles.panelExpandShown : ""}`}
             aria-label="Expand panel"
+            data-tip="Expand sidebar"
             aria-hidden={!panelCollapsed}
             tabIndex={panelCollapsed ? 0 : -1}
             onClick={() => setPanelCollapsed(false)}
@@ -251,8 +253,9 @@ export default function Page() {
           </button>
 
           <button
-            className={styles.themeToggle}
+            className={`${styles.themeToggle} ${styles.tip} ${styles.tipLeft}`}
             aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            data-tip={theme === "dark" ? "Light mode" : "Dark mode"}
             onClick={toggleTheme}
           >
             {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
@@ -343,9 +346,9 @@ export default function Page() {
                 <span className={styles.sheetTitle}>Settings</span>
                 <div className={styles.sheetHeadActions}>
                   <button
-                    className={`${styles.panelReset} ${settingsChanged ? "" : styles.panelResetHidden}`}
+                    className={`${styles.panelReset} ${styles.tip} ${styles.tipRight} ${settingsChanged ? "" : styles.panelResetHidden}`}
                     aria-label="Reset settings"
-                    title="Reset settings"
+                    data-tip="Reset settings"
                     aria-hidden={!settingsChanged}
                     tabIndex={settingsChanged && sheetOpen ? 0 : -1}
                     onClick={resetSettings}

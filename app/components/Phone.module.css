@@ -4,8 +4,13 @@
      derived from the same height so both dimensions are concrete lengths —
      that lets the mobile<->desktop variant swap animate smoothly. */
   position: relative;
-  height: clamp(460px, calc(100dvh - 360px), 720px);
-  width: calc(clamp(460px, calc(100dvh - 360px), 720px) * 390 / 844);
+  /* Fill the viewport height leaving ~64px above the phone and below the device
+     toggle (the 214px accounts for that 2x64px + the right-area padding, the
+     gap to the toggle, and the toggle itself), so the app isn't scaled down /
+     floating in dead space on shorter screens (e.g. a 14" laptop). Floor keeps
+     it usable on very short viewports (the page scrolls instead). */
+  height: clamp(420px, calc(100dvh - 214px), 820px);
+  width: calc(clamp(420px, calc(100dvh - 214px), 820px) * 390 / 844);
   border-radius: 52px;
   background: var(--device-bg);
   padding: 6px;
@@ -34,8 +39,9 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: background 0.2s ease,
-    border-radius 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Background snaps instantly on theme toggle (in step with the messages + the
+     rest of the chrome); only the mobile<->desktop radius morph is animated. */
+  transition: border-radius 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Desktop demo variant: a landscape app window instead of a phone frame.
@@ -321,8 +327,10 @@
   width: calc(min(100cqmin, 360px) * var(--viz-scale, 1));
   height: calc(min(100cqmin, 360px) * var(--viz-scale, 1));
   transform-origin: 50% 50%;
+  /* The dock morph (centre -> small top presence) is quick so the orb keeps pace
+     with the message bubble appearing, instead of lagging behind it. */
   transition: width 0.18s ease, height 0.18s ease,
-    transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+    transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
 }
 
@@ -352,7 +360,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 128px 16px 150px; /* top clears the orb's solid backdrop; bottom clears the composer + its (softer, taller) frosted band */
+  padding: 200px 16px 118px; /* top matches the frosted band so the first message sits just below the orb and clears the gradient (same spot it stops at when scrolled all the way up); bottom clears the composer + its frosted band */
   -webkit-overflow-scrolling: touch;
   /* Hide the scrollbar (still scrollable) so the chat reads as a clean surface. */
   scrollbar-width: none; /* Firefox */
@@ -378,20 +386,51 @@
 }
 .chatFrost {
   top: 0;
-  height: 268px;
-  /* Opaque screen-bg extends DOWN past the orb, so the agent always sits on a
-     clean white/black background, then eases off over a long, soft fade to
-     reveal the messages below (a gentle solid → transparent ramp). */
-  background: linear-gradient(to bottom, var(--screen-bg) 186px, transparent 268px);
-  -webkit-mask-image: linear-gradient(to bottom, #000 186px, transparent 268px);
-  mask-image: linear-gradient(to bottom, #000 186px, transparent 268px);
+  height: 200px;
+  /* Opaque screen-bg covers the docked orb (which ends ~190px down) so messages
+     scrolling up fade fully behind it, then eases off right below it — so the
+     first message sits just under the orb (see .messages padding-top = fade end)
+     and stops at that same spot when scrolled all the way up. */
+  background: linear-gradient(to bottom, var(--screen-bg) 184px, transparent 200px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 184px, transparent 200px);
+  mask-image: linear-gradient(to bottom, #000 184px, transparent 200px);
 }
 .chatFrostBottom {
   bottom: 0;
-  height: 140px;
-  background: linear-gradient(to top, var(--screen-bg) 54px, transparent 140px);
-  -webkit-mask-image: linear-gradient(to top, #000 54px, transparent 140px);
-  mask-image: linear-gradient(to top, #000 54px, transparent 140px);
+  height: 116px;
+  background: linear-gradient(to top, var(--screen-bg) 60px, transparent 116px);
+  -webkit-mask-image: linear-gradient(to top, #000 60px, transparent 116px);
+  mask-image: linear-gradient(to top, #000 60px, transparent 116px);
+}
+
+/* Hero-view scrims behind the header + composer. When the desktop window is
+   resized small the centred visual/greeting can reach the chrome; these fade the
+   background up behind the header and down behind the composer so the title and
+   input stay legible instead of overlapping the visual. (Chat mode uses the
+   frosted bands above instead.) Sit above the visual (z1), below header/composer. */
+.topScrim,
+.bottomScrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  pointer-events: none;
+  backdrop-filter: blur(6px) saturate(108%);
+  -webkit-backdrop-filter: blur(6px) saturate(108%);
+}
+.topScrim {
+  top: 0;
+  height: 116px;
+  background: linear-gradient(to bottom, var(--screen-bg) 58px, transparent 116px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 58px, transparent 116px);
+  mask-image: linear-gradient(to bottom, #000 58px, transparent 116px);
+}
+.bottomScrim {
+  bottom: 0;
+  height: 132px;
+  background: linear-gradient(to top, var(--screen-bg) 70px, transparent 132px);
+  -webkit-mask-image: linear-gradient(to top, #000 70px, transparent 132px);
+  mask-image: linear-gradient(to top, #000 70px, transparent 132px);
 }
 
 /* Non-interactive layout spacer that balances the header so the title stays
@@ -420,9 +459,10 @@
   letter-spacing: 0.005em;
   word-break: break-word;
   animation: msgIn 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
-  /* Fade colours in step with the screen background on theme toggle so the
-     whole list changes as one unit (no lagging behind the rest of the UI). */
-  transition: background 0.2s ease, color 0.2s ease;
+  /* No colour transition on theme toggle — the rest of the screen (header,
+     composer, chrome) switches instantly, so the messages must too or they lag
+     behind. The screen background also snaps (see .screen), so there's no
+     mid-transition contrast dip. */
 }
 @keyframes msgIn {
   from {

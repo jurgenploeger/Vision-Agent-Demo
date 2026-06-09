@@ -17,6 +17,7 @@ import Orb from "./visualizations/Orb";
 import Glow from "./visualizations/Glow";
 import Sphere from "./visualizations/Sphere";
 import Ring from "./visualizations/Ring";
+import Bars from "./visualizations/Bars";
 import Aura from "./visualizations/Aura";
 import Wave from "./visualizations/Wave";
 import { AgentState } from "./visualizations/states";
@@ -103,16 +104,25 @@ export default function Phone({
     tick();
   };
 
-  // Canned agent replies (demo) — picked at random. No em dashes by request.
+  // Canned agent replies (demo) — picked at random, with a bit of personality.
+  // No em dashes by request.
   const AGENT_REPLIES = [
     "Got it, let me look into that for you.",
-    "Sure! Here's what I can help with.",
-    "Happy to help. One moment while I pull that up.",
-    "Great question! Here's a quick rundown.",
-    "On it. Give me just a second.",
-    "Absolutely, here's what I found.",
-    "Good one. Let me think that through.",
-    "Of course! Here's a quick take.",
+    "Ooh, fun one. Give me a sec.",
+    "On it! Crunching the details now.",
+    "Love that question. Here's the scoop.",
+    "Say less, I'm on it.",
+    "Great minds! Here's what I found.",
+    "Hmm, let me think out loud for a second.",
+    "Easy. Here's the quick version.",
+    "One sec, working a little magic.",
+    "Interesting! Let me pull that together.",
+    "Right away. Just a moment.",
+    "Let me put my thinking cap on.",
+    "Absolutely, here's the rundown.",
+    "Good call. Here's a quick take.",
+    "Beep boop, processing... kidding, here you go.",
+    "Oh, I've got thoughts on this one.",
   ];
 
   const send = () => {
@@ -135,11 +145,13 @@ export default function Phone({
     ]);
     setAgentState("thinking");
     setPendingId(agentId);
+    // Vary the "thinking" pause so replies don't arrive on a fixed beat.
+    const thinkMs = 650 + Math.random() * 1350; // ~0.65s – 2.0s
     const t1 = window.setTimeout(() => {
       setPendingId(null);
       setAgentState("speaking");
       startTyping(agentId, reply);
-    }, 900);
+    }, thinkMs);
     replyTimers.current.push(t1);
   };
 
@@ -270,10 +282,9 @@ export default function Phone({
     ctx?: AudioContext;
     analyser?: AnalyserNode;
     mute?: GainNode; // pulls the graph to the destination (silently) so the analyser runs
-    // Explicit <ArrayBuffer> (not the default <ArrayBufferLike>) so these satisfy
-    // the analyser's getByte*Data signatures under TS 5.7+'s generic typed arrays.
+    // Explicit <ArrayBuffer> (not the default <ArrayBufferLike>) so this satisfies
+    // the analyser's getByteTimeDomainData signature under TS 5.7+'s generic typed arrays.
     data?: Uint8Array<ArrayBuffer>;
-    freq?: Uint8Array<ArrayBuffer>;
     simulated?: boolean; // fallback when no real mic (e.g. insecure origin)
     raf?: number;
   }>({});
@@ -413,8 +424,7 @@ export default function Phone({
       analyser.connect(mute);
       mute.connect(ctx.destination);
       const data = new Uint8Array(analyser.fftSize);
-      const freq = new Uint8Array(analyser.frequencyBinCount);
-      audio.current = { stream, ctx, analyser, mute, data, freq };
+      audio.current = { stream, ctx, analyser, mute, data };
       micRef.current.active = true;
       setVoiceMode(true);
       runVoiceLoop();
@@ -470,6 +480,7 @@ export default function Phone({
     if (viz === "orb" || viz === "glow" || viz === "sphere") hit = dist < 0.32;
     else if (viz === "aura") hit = dist < 0.42;
     else if (viz === "ring") hit = dist < 0.46;
+    else if (viz === "bars") hit = Math.abs(dx) < 0.34 && Math.abs(dy) < 0.48;
     else hit = Math.abs(dy) < 0.14 && Math.abs(dx) < 0.5; // wave: the line band
     return { hit, x: dx, y: -dy }; // shader coords (flip y: DOM is y-down)
   };
@@ -534,9 +545,12 @@ export default function Phone({
     }
   };
 
-  // Hover: while the cursor is over the visual, feed its position to the active
+  // Hover: while the MOUSE is over the visual, feed its position to the active
   // shader (via a ref, so it doesn't re-render). Reactions fade out on leave.
-  const onScreenMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  // Touch is excluded — a tap emulates a mousemove but never a mouseleave, so the
+  // hover ripple would stick on; on touch the transient tap ripple is enough.
+  const onScreenMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "mouse") return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const p = pointerInViz(e.clientX, e.clientY);
     if (!p || !p.hit) {
@@ -558,10 +572,12 @@ export default function Phone({
       <div
         className={`${styles.screen} ${isDesktop ? styles.screenDesktop : ""}`}
         onClick={onScreenTap}
-        onMouseMove={onScreenMove}
         onMouseLeave={onScreenLeave}
         onPointerDown={onVizPointerDown}
-        onPointerMove={onVizPointerMove}
+        onPointerMove={(e) => {
+          onScreenMove(e); // hover (mouse only)
+          onVizPointerMove(e); // sphere drag
+        }}
         onPointerUp={endVizDrag}
         onPointerCancel={endVizDrag}
       >
@@ -636,6 +652,9 @@ export default function Phone({
               <div className={`${styles.vizLayer} ${viz === "ring" ? styles.vizOn : ""}`}>
                 <Ring colors={colors} running={viz === "ring"} state={effectiveState} dark={dark} expressivity={expressivity} tap={tap} hover={hoverRef} mic={micRef} />
               </div>
+              <div className={`${styles.vizLayer} ${viz === "bars" ? styles.vizOn : ""}`}>
+                <Bars colors={colors} running={viz === "bars"} state={effectiveState} dark={dark} expressivity={expressivity} tap={tap} hover={hoverRef} mic={micRef} />
+              </div>
               <div className={`${styles.vizLayer} ${viz === "aura" ? styles.vizOn : ""}`}>
                 <Aura colors={colors} running={viz === "aura"} state={effectiveState} dark={dark} expressivity={expressivity} tap={tap} hover={hoverRef} mic={micRef} />
               </div>
@@ -680,6 +699,11 @@ export default function Phone({
             they scroll up under the docked orb, or down behind the composer. */}
         {chatMode && overflowing && <div className={styles.chatFrost} aria-hidden />}
         {chatMode && overflowing && <div className={styles.chatFrostBottom} aria-hidden />}
+
+        {/* Hero view: fade the background behind the header + composer so a small
+            (resized) screen doesn't let the visual/greeting overlap the chrome. */}
+        {!chatMode && <div className={styles.topScrim} aria-hidden />}
+        {!chatMode && <div className={styles.bottomScrim} aria-hidden />}
 
         {/* Bottom input bar — the audio button lives inside the composer and
             swaps to a send button once there's text. */}

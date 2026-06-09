@@ -98,8 +98,8 @@ export function vividColor(hueDeg: number): Color {
   return { h, s, v };
 }
 
-// Deep electric blue-violet so the first render looks intentional (Siri-like).
-export const DEFAULT_COLOR: Color = vividColor(252);
+// Stream brand blue (#005FFF) so the first render is on-brand.
+export const DEFAULT_COLOR: Color = hexToHsv("#005FFF") ?? vividColor(218);
 
 // Picker swatches: ten vivid hues spaced evenly around the wheel (36° steps) so
 // every preset is clearly distinct, plus black + white as the only neutrals.

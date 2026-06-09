@@ -12,6 +12,7 @@ import Orb from "./visualizations/Orb";
 import Glow from "./visualizations/Glow";
 import Sphere from "./visualizations/Sphere";
 import Ring from "./visualizations/Ring";
+import Bars from "./visualizations/Bars";
 import Aura from "./visualizations/Aura";
 import Wave from "./visualizations/Wave";
 import type { ComponentType } from "react";
@@ -22,6 +23,7 @@ const TABS: { id: Viz; label: string; Viz: ComponentType<VisualizationProps> }[]
   { id: "orb", label: "Orb", Viz: Orb },
   { id: "sphere", label: "Sphere", Viz: Sphere },
   { id: "ring", label: "Ring", Viz: Ring },
+  { id: "bars", label: "Bars", Viz: Bars },
   { id: "aura", label: "Aura", Viz: Aura },
   { id: "wave", label: "Wave", Viz: Wave },
 ];

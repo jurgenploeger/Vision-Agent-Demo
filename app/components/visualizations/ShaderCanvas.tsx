@@ -174,7 +174,6 @@ export default function ShaderCanvas({
       depthTest: false,
       uniforms: {
         uTime: { value: 0 },
-        uSpin: { value: 0 },
         uCol0: { value: new Vec3(...colorTarget.current.cols[0]) },
         uCol1: { value: new Vec3(...colorTarget.current.cols[1]) },
         uCol2: { value: new Vec3(...colorTarget.current.cols[2]) },
@@ -259,13 +258,8 @@ export default function ShaderCanvas({
     let curReact = stateTarget.current.react;
     // Expressivity, lerped so dragging the slider eases the Sphere's ripple count.
     let curExpr = expressivityRef.current;
-    // Separate, continuously-integrated angle for the orb's comet spin. Its speed
-    // is STRONGLY state-dependent (much slower when idle/listening, fast when
-    // thinking/speaking) — integrating it rather than multiplying uTime keeps the
-    // phase continuous, so changing state never makes the comets jump.
-    let tSpin = 0;
     // Flow-gated spin time for the Orb/Glow "thinking" rotation. Advances only while
-    // thinking (curFlow) — integrated like tSpin (not computed as t*curFlow) so the
+    // thinking (curFlow) — integrated (not computed as t*curFlow) so the
     // rotation eases in/out with the state instead of jumping by the whole elapsed
     // time whenever a message flips the state (which spun the Orb fast).
     let flowTime = 0;
@@ -326,11 +320,6 @@ export default function ShaderCanvas({
       // Orbit phase: base rate, lifted a touch while active (flow/react). Continuous,
       // so a state change eases the orbit speed instead of jumping the angle.
       orbSpin += tStep * (1.0 + 0.5 * curFlow + 0.1 * curReact);
-      // Comet spin speed: low base (idle ~0.33) lifted mostly by react (listening
-      // ~0.7, speaking ~1.3) and flow (thinking ~1.2), plus load (connecting ~0.8)
-      // — so the comets clearly rotate slower in listening/ready than speaking.
-      const spinSpeed = 0.2 + 1.1 * curReact + 1.0 * curFlow + 0.55 * curLoad;
-      tSpin += dt * (reduced ? 0.07 : 1.0) * spinSpeed;
 
       // Tap ripple: detect a new tap, snap its position, and reset the timer.
       const tp = tapRef.current;
@@ -395,7 +384,6 @@ export default function ShaderCanvas({
       curCount += (ct.count - curCount) * 0.12;
 
       program.uniforms.uTime.value = t;
-      program.uniforms.uSpin.value = tSpin;
       program.uniforms.uFlowSpin.value = flowTime;
       program.uniforms.uOrbSpin.value = orbSpin;
       program.uniforms.uCol0.value.set(...cur0);
@@ -410,7 +398,11 @@ export default function ShaderCanvas({
       program.uniforms.uOrbit.value = curOrbit;
       program.uniforms.uLoad.value = curLoad;
       program.uniforms.uFlow.value = curFlow;
-      program.uniforms.uReact.value = curReact;
+      // In voice mode, drive reactivity from the live mic level so the visual
+      // "speaks" in sync with the audio waveform (regardless of the selected
+      // state); outside voice mode (voiceAmt 0) this is just curReact.
+      program.uniforms.uReact.value =
+        curReact + (Math.max(curReact, micLevel) - curReact) * voiceAmt;
       program.uniforms.uExpressivity.value = curExpr;
       program.uniforms.uDark.value = darkRef.current ? 1 : 0;
       renderer.render({ scene: mesh });

@@ -69,9 +69,56 @@
   color: var(--text); /* the wordmark uses currentColor; the mark stays blue */
 }
 
+/* ---------- Small black hover tooltip (icon buttons) ---------- */
+/* Reads its label from data-tip; .tipRight / .tipLeft choose the side (vertically
+   centred on the button). The host must be positioned (the fixed ones already
+   are; static ones get position: relative below). */
+.tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: #16171d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+  z-index: 100;
+}
+.tip:hover::after {
+  opacity: 1;
+}
+.tipRight::after {
+  left: calc(100% + 8px);
+}
+.tipLeft::after {
+  right: calc(100% + 8px);
+}
+/* Dark mode: lift the tooltip off the dark background — a touch lighter with a
+   subtle hairline border. */
+:global([data-theme="dark"]) .tip::after {
+  background: #2b2c36;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tip::after {
+    transition: none;
+  }
+}
+
 /* Subtle reset in the panel's top-right corner — restores the visualization
    settings to their defaults. Quiet by default, firms up on hover. */
 .panelReset {
+  position: relative; /* anchor its tooltip */
   flex: 0 0 auto;
   display: grid;
   place-items: center;
@@ -117,6 +164,7 @@
 }
 
 .panelCollapse {
+  position: relative; /* anchor its tooltip */
   flex: 0 0 auto;
   align-self: flex-start;
   margin-top: 18px;
@@ -700,7 +748,19 @@
 }
 @media (hover: hover) {
   .styleThumb:hover .styleThumbViz {
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+  }
+  /* Non-active: an accent-tinted ring + soft lift shadow so hovering clearly
+     previews the selection. */
+  .styleThumb:not(.styleThumbActive):hover .styleThumbViz {
+    box-shadow: inset 0 0 0 1px var(--accent), 0 6px 16px rgba(0, 0, 0, 0.1);
+  }
+  /* Active: keep the 2px ring but add the same lift shadow. */
+  .styleThumbActive:hover .styleThumbViz {
+    box-shadow: inset 0 0 0 2px var(--accent), 0 6px 16px rgba(0, 0, 0, 0.1);
+  }
+  .styleThumb:not(.styleThumbActive):hover .styleThumbLabel {
+    color: var(--text);
   }
 }
 .styleThumb:active .styleThumbViz {
