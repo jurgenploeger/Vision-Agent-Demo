@@ -12,10 +12,14 @@ import type { Color } from "../color";
 // and its palette by setting `colors`. No global CSS, fonts, or framework APIs
 // are required.
 export type VisualizationProps = {
-  colors: Color[]; // 1-3 full HSV colours; lerped internally for smoothness
+  colors: Color[]; // 1-5 full HSV colours; lerped internally for smoothness
   running: boolean; // only the active visualization animates
   state: AgentState; // conversational state; drives motion/appearance
   dark: boolean; // theme — tunes the halo (clean on white vs glow on dark)
+  // How lively the motion is, as a multiplier on every state's animation
+  // (amplitude + a gentle speed lift). 1 = the tuned default; 0 ≈ still; 2 =
+  // twice as animated. Presence and colour are untouched, only the movement.
+  expressivity?: number;
   // A tap/click inside the visual; `id` increments per tap so a repeat tap on the
   // same spot still re-triggers the ripple. Position is in the shader's coords()
   // space (centre = 0,0; normalized to the shorter edge; y up).
@@ -66,6 +70,7 @@ export default function ShaderCanvas({
   running,
   state,
   dark,
+  expressivity = 1,
   tap,
   hover,
   mic,
@@ -77,16 +82,22 @@ export default function ShaderCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   // Target palette: three HSV colours + active count. Missing slots fall back
   // to colour 0 so a 1- or 2-colour palette still has valid uniforms.
-  const buildTarget = (): { cols: [HSV, HSV, HSV]; count: number } => ({
+  const buildTarget = (): {
+    cols: [HSV, HSV, HSV, HSV, HSV];
+    count: number;
+  } => ({
     cols: [
       toHSV(colors[0]),
       toHSV(colors[1] ?? colors[0]),
       toHSV(colors[2] ?? colors[0]),
+      toHSV(colors[3] ?? colors[0]),
+      toHSV(colors[4] ?? colors[0]),
     ],
     count: colors.length,
   });
   const colorTarget = useRef(buildTarget());
   const stateTarget = useRef<StateParams>(STATE_PARAMS[state]);
+  const expressivityRef = useRef(expressivity);
   const darkRef = useRef(dark);
   const tapRef = useRef(tap);
   const hoverPropRef = useRef(hover);
@@ -103,6 +114,9 @@ export default function ShaderCanvas({
   useEffect(() => {
     stateTarget.current = STATE_PARAMS[state];
   }, [state]);
+  useEffect(() => {
+    expressivityRef.current = expressivity;
+  }, [expressivity]);
   useEffect(() => {
     darkRef.current = dark;
   }, [dark]);
@@ -164,6 +178,8 @@ export default function ShaderCanvas({
         uCol0: { value: new Vec3(...colorTarget.current.cols[0]) },
         uCol1: { value: new Vec3(...colorTarget.current.cols[1]) },
         uCol2: { value: new Vec3(...colorTarget.current.cols[2]) },
+        uCol3: { value: new Vec3(...colorTarget.current.cols[3]) },
+        uCol4: { value: new Vec3(...colorTarget.current.cols[4]) },
         uCount: { value: colorTarget.current.count },
         uTap: { value: new Vec2(0, 0) },
         uTapTime: { value: 100 }, // large => no ripple until the first tap
@@ -180,6 +196,7 @@ export default function ShaderCanvas({
         uLoad: { value: stateTarget.current.load },
         uFlow: { value: stateTarget.current.flow },
         uReact: { value: stateTarget.current.react },
+        uExpressivity: { value: expressivityRef.current },
         uDark: { value: darkRef.current ? 1 : 0 },
       },
     });
@@ -202,6 +219,8 @@ export default function ShaderCanvas({
       program.uniforms.uCol0.value.set(...ct.cols[0]);
       program.uniforms.uCol1.value.set(...ct.cols[1]);
       program.uniforms.uCol2.value.set(...ct.cols[2]);
+      program.uniforms.uCol3.value.set(...ct.cols[3]);
+      program.uniforms.uCol4.value.set(...ct.cols[4]);
       program.uniforms.uCount.value = ct.count;
       program.uniforms.uDark.value = darkRef.current ? 1 : 0;
       renderer.render({ scene: mesh });
@@ -216,6 +235,8 @@ export default function ShaderCanvas({
     let cur0: HSV = [...colorTarget.current.cols[0]];
     let cur1: HSV = [...colorTarget.current.cols[1]];
     let cur2: HSV = [...colorTarget.current.cols[2]];
+    let cur3: HSV = [...colorTarget.current.cols[3]];
+    let cur4: HSV = [...colorTarget.current.cols[4]];
     let curCount = colorTarget.current.count;
     // Lerp an HSV toward its target in place: hue (0-1) takes the shortest path
     // around the wheel; saturation and value lerp linearly.
@@ -234,6 +255,8 @@ export default function ShaderCanvas({
     let curLoad = stateTarget.current.load;
     let curFlow = stateTarget.current.flow;
     let curReact = stateTarget.current.react;
+    // Expressivity, lerped so dragging the slider eases the Sphere's ripple count.
+    let curExpr = expressivityRef.current;
     // Separate, continuously-integrated angle for the orb's comet spin. Its speed
     // is STRONGLY state-dependent (much slower when idle/listening, fast when
     // thinking/speaking) — integrating it rather than multiplying uTime keeps the
@@ -262,16 +285,25 @@ export default function ShaderCanvas({
       last = now;
       if (dt > 0.05) dt = 0.05; // clamp tab-away jumps
 
-      // Lerp state drivers (~0.08 / frame) so transitions ease in.
+      // Lerp state drivers (~0.08 / frame) so transitions ease in. Expressivity
+      // (0..2, default 1) multiplies the motion: amplitude drivers scale by
+      // ampScale and speed by speedScale. Both keep a floor so even at the lowest
+      // setting the visual still gently breathes rather than freezing — at ex=1
+      // both scales are exactly 1 (the tuned default). Presence (bright) and
+      // colour (sat) are deliberately left untouched.
       const st = stateTarget.current;
-      curSpeed += (st.speed - curSpeed) * 0.08;
-      curLevel += (st.level - curLevel) * 0.08;
+      const ex = expressivityRef.current;
+      const ampScale = 0.15 + 0.85 * ex;   // 0.15 at min, 1 at default, ~1.85 at max
+      const speedScale = 0.6 + 0.4 * ex;   // 0.6 at min, 1 at default, 1.4 at max
+      curSpeed += (st.speed * speedScale - curSpeed) * 0.08;
+      curLevel += (st.level * ampScale - curLevel) * 0.08;
       curBright += (st.bright - curBright) * 0.08;
       curSat += (st.sat - curSat) * 0.08;
-      curOrbit += (st.orbit - curOrbit) * 0.08;
-      curLoad += (st.load - curLoad) * 0.08;
-      curFlow += (st.flow - curFlow) * 0.08;
-      curReact += (st.react - curReact) * 0.08;
+      curOrbit += (st.orbit * ampScale - curOrbit) * 0.08;
+      curLoad += (st.load * ampScale - curLoad) * 0.08;
+      curFlow += (st.flow * ampScale - curFlow) * 0.08;
+      curReact += (st.react * ampScale - curReact) * 0.08;
+      curExpr += (ex - curExpr) * 0.08;
 
       // Reduced motion: keep it barely alive instead of buzzing.
       t += dt * (reduced ? 0.07 : 1.0) * curSpeed;
@@ -339,6 +371,8 @@ export default function ShaderCanvas({
       lerpHSV(cur0, ct.cols[0]);
       lerpHSV(cur1, ct.cols[1]);
       lerpHSV(cur2, ct.cols[2]);
+      lerpHSV(cur3, ct.cols[3]);
+      lerpHSV(cur4, ct.cols[4]);
       curCount += (ct.count - curCount) * 0.12;
 
       program.uniforms.uTime.value = t;
@@ -346,6 +380,8 @@ export default function ShaderCanvas({
       program.uniforms.uCol0.value.set(...cur0);
       program.uniforms.uCol1.value.set(...cur1);
       program.uniforms.uCol2.value.set(...cur2);
+      program.uniforms.uCol3.value.set(...cur3);
+      program.uniforms.uCol4.value.set(...cur4);
       program.uniforms.uCount.value = curCount;
       program.uniforms.uLevel.value = curLevel;
       program.uniforms.uBright.value = curBright;
@@ -354,6 +390,7 @@ export default function ShaderCanvas({
       program.uniforms.uLoad.value = curLoad;
       program.uniforms.uFlow.value = curFlow;
       program.uniforms.uReact.value = curReact;
+      program.uniforms.uExpressivity.value = curExpr;
       program.uniforms.uDark.value = darkRef.current ? 1 : 0;
       renderer.render({ scene: mesh });
       raf = requestAnimationFrame(frame);
@@ -368,10 +405,14 @@ export default function ShaderCanvas({
         cur0 = [...ct.cols[0]];
         cur1 = [...ct.cols[1]];
         cur2 = [...ct.cols[2]];
+        cur3 = [...ct.cols[3]];
+        cur4 = [...ct.cols[4]];
         curCount = ct.count;
         program.uniforms.uCol0.value.set(...cur0);
         program.uniforms.uCol1.value.set(...cur1);
         program.uniforms.uCol2.value.set(...cur2);
+        program.uniforms.uCol3.value.set(...cur3);
+        program.uniforms.uCol4.value.set(...cur4);
         program.uniforms.uCount.value = curCount;
         // Don't replay the most recent tap when this viz becomes active again.
         lastTapId = tapRef.current ? tapRef.current.id : -1;

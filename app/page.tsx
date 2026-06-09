@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sun, Moon, X, DeviceMobile, Monitor, SidebarSimple } from "@phosphor-icons/react";
+import {
+  Sun,
+  Moon,
+  X,
+  DeviceMobile,
+  Monitor,
+  SidebarSimple,
+  ArrowCounterClockwise,
+} from "@phosphor-icons/react";
 import styles from "./page.module.css";
 import Phone from "./components/Phone";
 import Controls from "./components/Controls";
@@ -38,6 +46,9 @@ export default function Page() {
   // Visualization size multiplier (orb / glow / ring / wave). Bounded so it
   // can't shrink to nothing or overflow the screen. See SIZE_MIN/MAX in Controls.
   const [vizSize, setVizSize] = useState(1);
+  // How lively the visualization animates — a multiplier on every state's
+  // motion (1 = the tuned default). See EXPRESSIVITY_MIN/MAX in Controls.
+  const [expressivity, setExpressivity] = useState(1);
   // Desktop: the left side panel can collapse to a single bottom-left button,
   // freeing the whole viewport to centre the app screen.
   const [panelCollapsed, setPanelCollapsed] = useState(false);
@@ -124,9 +135,9 @@ export default function Page() {
   const setColorAt = (i: number, color: Color) =>
     setColors((c) => c.map((col, idx) => (idx === i ? color : col)));
   const addColor = () => {
-    setColors((c) => (c.length >= 3 ? c : [...c, nextColor(c[c.length - 1])]));
+    setColors((c) => (c.length >= 5 ? c : [...c, nextColor(c[c.length - 1])]));
     setColorIds((ids) =>
-      ids.length >= 3 ? ids : [...ids, colorIdSeq.current++]
+      ids.length >= 5 ? ids : [...ids, colorIdSeq.current++]
     );
   };
   const removeColor = (i: number) => {
@@ -139,6 +150,18 @@ export default function Page() {
   // tuned S/V so shuffles keep their confident look — see color.ts.)
   const shuffle = () => setColors((c) => shuffleColors(c.length));
 
+  // Reset the panel's visualization settings back to their initial defaults
+  // (style, state, palette, expressivity, size). Theme + device are app chrome
+  // and left as the user set them.
+  const resetSettings = () => {
+    setViz("glow");
+    setState("speaking");
+    setColors([DEFAULT_COLOR]);
+    setColorIds([0]);
+    setExpressivity(1);
+    setVizSize(1);
+  };
+
   const controlsProps = {
     viz,
     setViz,
@@ -150,6 +173,8 @@ export default function Page() {
     addColor,
     removeColor,
     shuffle,
+    expressivity,
+    setExpressivity,
     size: vizSize,
     setSize: setVizSize,
     isMobile,
@@ -169,6 +194,15 @@ export default function Page() {
           >
             <div className={styles.panelBrand}>
               <StreamLogo />
+              <button
+                className={styles.panelReset}
+                aria-label="Reset settings"
+                title="Reset settings"
+                tabIndex={panelCollapsed ? -1 : 0}
+                onClick={resetSettings}
+              >
+                <ArrowCounterClockwise size={16} />
+              </button>
             </div>
 
             <div className={styles.panelScroll}>
@@ -184,6 +218,15 @@ export default function Page() {
               <SidebarSimple size={18} />
             </button>
           </aside>
+
+          {/* Brand stays in the top-left corner once the panel is collapsed,
+              aligned to where it sits inside the panel so it reads as fixed. */}
+          <div
+            className={`${styles.brandFixed} ${panelCollapsed ? styles.brandFixedShown : ""}`}
+            aria-hidden={!panelCollapsed}
+          >
+            <StreamLogo />
+          </div>
 
           {/* Expand button — bottom-left of the page, only while collapsed. */}
           <button
@@ -211,6 +254,7 @@ export default function Page() {
               state={state}
               dark={theme === "dark"}
               vizScale={vizSize}
+              expressivity={expressivity}
               showMenu={false}
               onMenu={() => {}}
               onToggleTheme={toggleTheme}
@@ -261,6 +305,7 @@ export default function Page() {
               state={state}
               dark={theme === "dark"}
               vizScale={vizSize}
+              expressivity={expressivity}
               showMenu
               onMenu={openSheet}
               onToggleTheme={toggleTheme}

@@ -29,6 +29,7 @@ export default function Phone({
   state,
   dark,
   vizScale = 1,
+  expressivity = 1,
   showMenu,
   onMenu,
   onToggleTheme,
@@ -39,6 +40,7 @@ export default function Phone({
   state: AgentState;
   dark: boolean;
   vizScale?: number; // size multiplier for the centred visual (all styles)
+  expressivity?: number; // how lively the motion is (multiplier on every state)
   showMenu: boolean; // mobile: header carries the hamburger + theme toggle
   onMenu: () => void;
   onToggleTheme: () => void;
@@ -563,22 +565,22 @@ export default function Phone({
               style={viz === "sphere" ? { touchAction: "none" } : undefined}
             >
               <div className={`${styles.vizLayer} ${viz === "orb" ? styles.vizOn : ""}`}>
-                <Orb colors={colors} running={viz === "orb"} state={effectiveState} dark={dark} tap={tap} hover={hoverRef} mic={micRef} />
+                <Orb colors={colors} running={viz === "orb"} state={effectiveState} dark={dark} expressivity={expressivity} tap={tap} hover={hoverRef} mic={micRef} />
               </div>
               <div className={`${styles.vizLayer} ${viz === "glow" ? styles.vizOn : ""}`}>
-                <Glow colors={colors} running={viz === "glow"} state={effectiveState} dark={dark} tap={tap} hover={hoverRef} mic={micRef} />
+                <Glow colors={colors} running={viz === "glow"} state={effectiveState} dark={dark} expressivity={expressivity} tap={tap} hover={hoverRef} mic={micRef} />
               </div>
               <div className={`${styles.vizLayer} ${viz === "sphere" ? styles.vizOn : ""}`}>
-                <Sphere colors={colors} running={viz === "sphere"} state={effectiveState} dark={dark} tap={tap} hover={hoverRef} mic={micRef} drag={dragRef} />
+                <Sphere colors={colors} running={viz === "sphere"} state={effectiveState} dark={dark} expressivity={expressivity} tap={tap} hover={hoverRef} mic={micRef} drag={dragRef} />
               </div>
               <div className={`${styles.vizLayer} ${viz === "ring" ? styles.vizOn : ""}`}>
-                <Ring colors={colors} running={viz === "ring"} state={effectiveState} dark={dark} tap={tap} hover={hoverRef} mic={micRef} />
+                <Ring colors={colors} running={viz === "ring"} state={effectiveState} dark={dark} expressivity={expressivity} tap={tap} hover={hoverRef} mic={micRef} />
               </div>
               <div className={`${styles.vizLayer} ${viz === "aura" ? styles.vizOn : ""}`}>
-                <Aura colors={colors} running={viz === "aura"} state={effectiveState} dark={dark} tap={tap} hover={hoverRef} mic={micRef} />
+                <Aura colors={colors} running={viz === "aura"} state={effectiveState} dark={dark} expressivity={expressivity} tap={tap} hover={hoverRef} mic={micRef} />
               </div>
               <div className={`${styles.vizLayer} ${viz === "wave" ? styles.vizOn : ""}`}>
-                <Wave colors={colors} running={viz === "wave"} state={effectiveState} dark={dark} tap={tap} hover={hoverRef} mic={micRef} />
+                <Wave colors={colors} running={viz === "wave"} state={effectiveState} dark={dark} expressivity={expressivity} tap={tap} hover={hoverRef} mic={micRef} />
               </div>
             </div>
             {/* Greeting — hero only; hidden once a conversation starts. */}

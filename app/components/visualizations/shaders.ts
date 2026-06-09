@@ -1,5 +1,5 @@
 // Shared GLSL building blocks + one fragment shader per visualization.
-// All shaders are time-driven (uTime) and colour-driven (uCol0/1/2, full HSV
+// All shaders are time-driven (uTime) and colour-driven (uCol0..4, full HSV
 // so brand colours — including muted/dark tones — render true), and output
 // PREMULTIPLIED alpha so the colored halo bleeds into the white phone screen
 // instead of sitting on top of it like a sticker.
@@ -32,10 +32,15 @@ uniform float uOrbit;      // rotational / orbiting motion
 uniform float uLoad;       // bouncing loader sweep  -> connecting
 uniform float uFlow;       // traveling / spinner    -> thinking
 uniform float uReact;      // reactive amplitude     -> listening / speaking
+uniform float uExpressivity; // overall liveliness 0..2 (1 = default); Sphere scales
+                           // its ripple COUNT with it (amplitude is already scaled
+                           // into the state drivers on the JS side)
 uniform float uDark;       // 1 = dark theme, 0 = light (halo tuning)
 uniform vec3  uCol1;       // colour 2 as HSV; uCol0 (above) is colour 1
 uniform vec3  uCol2;       // colour 3 as HSV
-uniform float uCount;      // active colours, lerped 1 .. 3
+uniform vec3  uCol3;       // colour 4 as HSV
+uniform vec3  uCol4;       // colour 5 as HSV
+uniform float uCount;      // active colours, lerped 1 .. 5
 uniform vec2  uTap;        // last tap/click position, in coords() space
 uniform float uTapTime;    // seconds since that tap (large when idle => no ripple)
 uniform vec2  uHover;      // live cursor position while hovering, in coords() space
@@ -253,6 +258,8 @@ void main() {
   // 2/3 as they activate.
   float g1 = clamp(uCount - 1.0, 0.0, 1.0);
   float g2 = clamp(uCount - 2.0, 0.0, 1.0);
+  float g3 = clamp(uCount - 3.0, 0.0, 1.0);
+  float g4 = clamp(uCount - 4.0, 0.0, 1.0);
   vec3 cA = vivid(uCol0);
   vec3 kL = clamp(vivid(uCol0) * 1.30, 0.0, 1.0);
   // Deep shade for the single-colour gradient. Dark mode keeps it genuinely deep
@@ -261,13 +268,20 @@ void main() {
   vec3 kD = vivid(uCol0) * mix(0.92, 0.74, uDark);
   vec3 cB = mix(kL, vivid(uCol1), g1);
   vec3 cC = mix(kD, vivid(uCol2), g2);
+  vec3 cD = vivid(uCol3);                  // colours 4/5: only mixed in when active
+  vec3 cE = vivid(uCol4);
 
-  // Smooth, overlapping colour fields -> soft blends.
+  // Smooth, overlapping colour fields -> soft blends. Colours 4/5 ride on two
+  // extra fields, gated by g3/g4 so a 1-3 colour orb is left exactly as it was.
   float f0 = snoise(vec3(sp * 0.5 + 1.0, ct));
   float f1 = snoise(vec3(sp * 0.5 + 8.0, ct * 0.9 + 4.0));
+  float f2 = snoise(vec3(sp * 0.5 + 15.0, ct * 1.1 + 9.0));
+  float f3 = snoise(vec3(sp * 0.5 + 22.0, ct * 0.8 + 16.0));
   vec3 col = cA;
   col = mix(col, cB, smoothstep(-0.4, 0.7, f0));
   col = mix(col, cC, smoothstep(-0.3, 0.8, f1));
+  col = mix(col, cD, smoothstep(-0.2, 0.8, f2) * g3);
+  col = mix(col, cE, smoothstep(-0.2, 0.8, f3) * g4);
 
   // A single broad, soft sheen sweep (not busy ribbons) — keeps it sleek.
   float sheen = smoothstep(0.55, 0.95, snoise(vec3(sp * 0.55 + 30.0, ct)));
@@ -371,10 +385,17 @@ void main() {
   float orbS = 1.0 + 0.5 * uFlow + 0.1 * speechSmooth;   // masses circle a touch faster when active
   float a0 =  bt * 0.42 * orbS + 2.0 * snoise(vec3(bt * 0.12, 0.0, 0.0));
   float a1 = -bt * 0.34 * orbS + 2.0 * snoise(vec3(bt * 0.10, 5.0, 0.0)) + 2.0;
+  // Two more orbiting masses for colours 4/5 — only contribute once active (g3/g4).
+  float a2 =  bt * 0.30 * orbS + 2.0 * snoise(vec3(bt * 0.11, 9.0, 0.0)) + 1.0;
+  float a3 = -bt * 0.26 * orbS + 2.0 * snoise(vec3(bt * 0.09, 14.0, 0.0)) + 3.5;
   vec2 c0 = 0.40 * vec2(cos(a0), sin(a0));
   vec2 c1 = 0.38 * vec2(cos(a1), sin(a1));
+  vec2 c2c = 0.36 * vec2(cos(a2), sin(a2));
+  vec2 c3c = 0.34 * vec2(cos(a3), sin(a3));
   float b0 = smoothstep(1.15, 0.1, length(sp - c0));
   float b1 = smoothstep(1.30, 0.1, length(sp - c1));
+  float b2 = smoothstep(1.20, 0.1, length(sp - c2c));
+  float b3 = smoothstep(1.25, 0.1, length(sp - c3c));
 
   vec3 k0   = saturate3(vivid(uCol0), 1.7);
   vec3 kL   = saturate3(clamp(vivid(uCol0) * 1.18, 0.0, 1.0), 1.3);
@@ -383,11 +404,16 @@ void main() {
   vec3 kD   = saturate3(vivid(uCol0) * 0.85, 1.3);
   vec3 colB = mix(kL, saturate3(vivid(uCol1), 1.7), clamp(uCount - 1.0, 0.0, 1.0));
   vec3 colC = mix(kD, saturate3(vivid(uCol2), 1.7), clamp(uCount - 2.0, 0.0, 1.0));
+  vec3 colD = saturate3(vivid(uCol3), 1.7);
+  vec3 colE = saturate3(vivid(uCol4), 1.7);
   vec3 base = saturate3(mix(vivid(uCol0), vec3(1.0), 0.06), 1.3);
   vec3 col = base;
   col = mix(col, k0,   b0);
   col = mix(col, colB, b1);
   col = mix(col, colC, b0 * 0.5);
+  // Colours 4/5 fold in on their own masses, gated so 1-3 colours are unchanged.
+  col = mix(col, colD, b2 * clamp(uCount - 3.0, 0.0, 1.0));
+  col = mix(col, colE, b3 * clamp(uCount - 4.0, 0.0, 1.0));
   // Mixing different hues averages toward a muddy, darker midpoint; push the
   // saturation + value back up so multi-colour glows stay bright and vivid.
   col = saturate3(col, 1.15);
@@ -442,6 +468,10 @@ void main() {
   // thinking and connecting each lift it via their own driver; speaking peaks.
   // Drives ripple amplitude + silhouette wobble so every state reads distinct.
   float energy = 0.32 + 0.40 * uReact + 0.42 * uFlow + 0.26 * uLoad + 0.55 * speech;
+  // Expressivity also sets how MANY ripples there are: it scales the meridian-fold
+  // frequencies (and the silhouette folds), so a low setting reads as a few broad
+  // folds and a high setting as many tighter ones. 1 = the tuned default.
+  float fexp = 0.7 + 0.3 * uExpressivity;   // 0.7x folds at min, 1x default, 1.3x max
 
   // Globe spin (left -> right), shared by the silhouette ripple AND the surface
   // folds below so the edge bulges track the waves rolling across the surface.
@@ -457,7 +487,7 @@ void main() {
   // round sphere instead of a wobbly blob. Top & bottom stay perfectly round.
   float ea = atan(q.y, q.x);
   float rimx = cos(ea);
-  float foldEdge = 0.60 * sin(rimx * 7.0 - rot) + 0.40 * sin(rimx * 13.0 - rot * 1.8);
+  float foldEdge = 0.60 * sin(rimx * 7.0 * fexp - rot) + 0.40 * sin(rimx * 13.0 * fexp - rot * 1.8);
   float sideW = rimx * rimx;            // strong at L/R (folds seen edge-on), ~0 top/bottom
   // A gentle symmetric ripple is always present; while SPEAKING the wave crests
   // additionally bulge OUTWARD over the base circle (rectified to positive only,
@@ -465,7 +495,14 @@ void main() {
   // speech envelope — the ripples visibly crest over the edge as the agent talks.
   float ripple = foldEdge * sideW * (0.010 + 0.018 * energy);
   float bulge  = max(foldEdge, 0.0) * sideW * (0.06 * uReact + 0.16 * speech);
-  float R = 0.245 * (1.0 + ripple + bulge);
+  // Hover: the silhouette reaches toward the cursor. A rounded crest centred on the
+  // cursor's angular direction protrudes the edge there and tracks the pointer as
+  // it moves around the sphere; it rides the fold waves so it crests like the rest
+  // of the surface rather than ballooning. Fades in/out with uHoverAmt.
+  float hoverAng = atan(uHover.y, uHover.x);
+  float hoverNear = exp(-pow(acos(clamp(cos(ea - hoverAng), -1.0, 1.0)) / 0.7, 2.0));
+  float hoverBulge = hoverNear * uHoverAmt * (0.05 + 0.06 * max(foldEdge, 0.0));
+  float R = 0.245 * (1.0 + ripple + bulge + hoverBulge);
   float aa = 1.6 / min(uResolution.x, uResolution.y);
   float circle = 1.0 - smoothstep(R - aa, R + aa, r);
   if (circle <= 0.0) { gl_FragColor = vec4(0.0); return; }
@@ -483,11 +520,12 @@ void main() {
   float w0n = snoise(vec3(wc, nt));
   float w1n = snoise(vec3(wc + 5.0, nt));
   float sx = p.x + 0.10 * w0n;                         // mostly-x surface coord (slight warp)
-  float A = sx * 7.0 - rot;
-  float B = sx * 13.0 - rot * 1.8;
+  float A = sx * 7.0 * fexp - rot;
+  float B = sx * 13.0 * fexp - rot * 1.8;
   // Analytic gradient: folds vary in x only (dh/dy ~ 0) so the ripple stays a
-  // vertical line; the noise adds a little organic perturbation.
-  vec2 grad = vec2(7.0 * cos(A) + 6.5 * cos(B), 0.0);
+  // vertical line; the noise adds a little organic perturbation. The coefficients
+  // track the fold frequencies (scaled by fexp) so the relief stays correct.
+  vec2 grad = vec2(7.0 * fexp * cos(A) + 6.5 * fexp * cos(B), 0.0);
   grad += 1.8 * vec2(w0n, w1n);
   float bump = (0.060 + 0.105 * energy) * (0.55 + 0.45 * z); // deeper folds -> stronger 3D relief
   vec3 N = normalize(n - vec3(grad * bump, 0.0));
@@ -520,6 +558,8 @@ void main() {
   // exactly like the Glow). Adding a colour mixes its mass into the gradient.
   float g1 = clamp(uCount - 1.0, 0.0, 1.0);
   float g2 = clamp(uCount - 2.0, 0.0, 1.0);
+  float g3 = clamp(uCount - 3.0, 0.0, 1.0);
+  float g4 = clamp(uCount - 4.0, 0.0, 1.0);
   vec3 k0   = saturate3(vivid(uCol0), 1.25);
   vec3 kL   = saturate3(clamp(vivid(uCol0) * 1.18, 0.0, 1.0), 1.2);
   // Light mode lifts the deep shade so a single-colour sphere doesn't carry a
@@ -527,15 +567,22 @@ void main() {
   vec3 kD   = saturate3(vivid(uCol0) * mix(0.94, 0.85, uDark), 1.2);
   vec3 colB = mix(kL, saturate3(vivid(uCol1), 1.25), g1);
   vec3 colC = mix(kD, saturate3(vivid(uCol2), 1.25), g2);
+  vec3 colD = saturate3(vivid(uCol3), 1.25);           // colours 4/5: gated below
+  vec3 colE = saturate3(vivid(uCol4), 1.25);
   float drift = rot * 0.5;                              // sweeps with the globe spin
   // LOW-frequency field + VERY WIDE smoothstep = big, soft gradient blurs that
   // melt into each other (not small spotted blobs).
   vec2 fp = vec2(sx * 0.85 - drift, p.y * 0.8 - uDrag.y * 0.5); // surface field coord (large masses; vertical swipe rolls it)
   float bb0 = smoothstep(-0.65, 0.75, snoise(vec3(fp, rot * 0.10 + 2.0)));
   float bb1 = smoothstep(-0.45, 0.85, snoise(vec3(fp * 0.8 + 8.0, rot * 0.08 - 1.0)));
+  // Two more drifting masses carry colours 4/5; gated so 1-3 colours are unchanged.
+  float bb2 = smoothstep(-0.55, 0.80, snoise(vec3(fp * 0.9 + 15.0, rot * 0.12 + 5.0)));
+  float bb3 = smoothstep(-0.50, 0.82, snoise(vec3(fp * 0.7 + 22.0, rot * 0.06 - 4.0)));
   vec3 hue = k0;
   hue = mix(hue, colB, bb0);
   hue = mix(hue, colC, bb1);
+  hue = mix(hue, colD, bb2 * g3);
+  hue = mix(hue, colE, bb3 * g4);
   hue = saturate3(hue, 1.2);
 
   vec3 light = mix(hue, vec3(1.0), 0.8);
@@ -648,19 +695,25 @@ void main() {
   // --- The base ring the spikes grow from (static, thin). ---
   float ring = 1.0 - smoothstep(0.009, 0.012, abs(r - R0));
 
-  // --- Palette: up to 3 hues blended SEAMLESSLY around the ring. Colours sit at
-  // evenly-spaced angles and blend with periodic (wrap-around) weights, so there
-  // is no start/end seam and the hues fade softly into one another. The set
-  // slowly rotates; colours 2/3 crossfade in with uCount. ---
+  // --- Palette: up to 5 hues blended SEAMLESSLY around the ring. Colours sit at
+  // evenly-spaced angles (TAU / active count) and blend with periodic (wrap-
+  // around) weights, so there is no start/end seam and the hues fade softly into
+  // one another. The set slowly rotates; colours 2-5 crossfade in with uCount.
+  // (At 3 colours the spacing is TAU/3, exactly as before.) ---
   vec3 k0 = vivid(uCol0);
   vec3 k1 = vivid(uCol1);
   vec3 k2 = vivid(uCol2);
+  vec3 k3 = vivid(uCol3);
+  vec3 k4 = vivid(uCol4);
   float spin = t * 0.16;
   float sharp = 1.3;                          // lower = softer fade between hues
+  float cseg = TAU / max(uCount, 1.0);        // even angular spacing for any count
   float w0 = exp(sharp * (cos(a - spin) - 1.0));
-  float w1 = exp(sharp * (cos(a - spin - TAU / 3.0) - 1.0)) * clamp(uCount - 1.0, 0.0, 1.0);
-  float w2 = exp(sharp * (cos(a - spin - 2.0 * TAU / 3.0) - 1.0)) * clamp(uCount - 2.0, 0.0, 1.0);
-  vec3 col = (k0 * w0 + k1 * w1 + k2 * w2) / (w0 + w1 + w2 + 1e-4);
+  float w1 = exp(sharp * (cos(a - spin - cseg) - 1.0)) * clamp(uCount - 1.0, 0.0, 1.0);
+  float w2 = exp(sharp * (cos(a - spin - 2.0 * cseg) - 1.0)) * clamp(uCount - 2.0, 0.0, 1.0);
+  float w3 = exp(sharp * (cos(a - spin - 3.0 * cseg) - 1.0)) * clamp(uCount - 3.0, 0.0, 1.0);
+  float w4 = exp(sharp * (cos(a - spin - 4.0 * cseg) - 1.0)) * clamp(uCount - 4.0, 0.0, 1.0);
+  vec3 col = (k0 * w0 + k1 * w1 + k2 * w2 + k3 * w3 + k4 * w4) / (w0 + w1 + w2 + w3 + w4 + 1e-4);
   col = saturate3(col, 1.25);
   col = desat(col, uSat);
 
@@ -752,19 +805,27 @@ void main() {
   float core = 1.0 - smoothstep(halfWv - pix, halfWv + pix, abs(q.y - y));
 
   // --- gradient colours flowing ALONG the string: broad, soft bands whose
-  // centres slowly drift, so the colours smoothly change over time. 1-3 colours
-  // crossfade in/out with uCount (a single colour fills the whole line). ---
+  // centres slowly drift, so the colours smoothly change over time. 1-5 colours
+  // crossfade in/out with uCount (a single colour fills the whole line). Band
+  // centres spread evenly along the line ((i+0.5)/count). ---
   vec3 k0 = vivid(uCol0);
   vec3 k1 = vivid(uCol1);
   vec3 k2 = vivid(uCol2);
+  vec3 k3 = vivid(uCol3);
+  vec3 k4 = vivid(uCol4);
   float gx = clamp(x + 0.5, 0.0, 1.0);             // 0..1 along the line
-  float m0 = 0.22 + 0.12 * sin(t * 0.13);
-  float m1 = 0.50 + 0.13 * sin(t * 0.11 + 2.1);
-  float m2 = 0.78 + 0.12 * sin(t * 0.17 + 4.2);
+  float seg = 1.0 / max(uCount, 1.0);              // even band spacing for any count
+  float m0 = 0.5 * seg + 0.12 * sin(t * 0.13);
+  float m1 = 1.5 * seg + 0.13 * sin(t * 0.11 + 2.1);
+  float m2 = 2.5 * seg + 0.12 * sin(t * 0.17 + 4.2);
+  float m3 = 3.5 * seg + 0.12 * sin(t * 0.15 + 1.0);
+  float m4 = 4.5 * seg + 0.12 * sin(t * 0.10 + 3.3);
   float w0 = exp(-pow((gx - m0) / 0.30, 2.0));
   float w1 = exp(-pow((gx - m1) / 0.30, 2.0)) * clamp(uCount - 1.0, 0.0, 1.0);
   float w2 = exp(-pow((gx - m2) / 0.30, 2.0)) * clamp(uCount - 2.0, 0.0, 1.0);
-  vec3 col = (k0 * w0 + k1 * w1 + k2 * w2) / (w0 + w1 + w2 + 1e-4);
+  float w3 = exp(-pow((gx - m3) / 0.30, 2.0)) * clamp(uCount - 3.0, 0.0, 1.0);
+  float w4 = exp(-pow((gx - m4) / 0.30, 2.0)) * clamp(uCount - 4.0, 0.0, 1.0);
+  vec3 col = (k0 * w0 + k1 * w1 + k2 * w2 + k3 * w3 + k4 * w4) / (w0 + w1 + w2 + w3 + w4 + 1e-4);
   col = saturate3(col, 1.2);
   col = desat(col, uSat);
 
@@ -845,12 +906,19 @@ void main() {
 
   float g1 = clamp(uCount - 1.0, 0.0, 1.0);
   float g2 = clamp(uCount - 2.0, 0.0, 1.0);
+  float g3 = clamp(uCount - 3.0, 0.0, 1.0);
+  float g4 = clamp(uCount - 4.0, 0.0, 1.0);
   vec3 c0 = vivid(uCol0);
   // ALWAYS six strands regardless of colour count: inactive colour slots collapse
   // to the active palette (lines never disappear, only recolour). Slots 2/3
   // become colours 2/3 as they activate, else fall back to colour 1.
   vec3 c1 = mix(c0, vivid(uCol1), g1);
   vec3 c2 = mix(c0, vivid(uCol2), g2);
+  // Colours 4/5 recolour two of the fainter companion strands once active, so the
+  // weave can show up to five hues without adding strands. They fall back to
+  // c0 / c1 when inactive, leaving a 1-3 colour aura exactly as it was.
+  vec3 c3 = mix(c0, vivid(uCol3), g3);
+  vec3 c4 = mix(c1, vivid(uCol4), g4);
 
   // Six strands (different phase/frequency/speed so they weave + roll). Two
   // strands per colour slot so the picked colours read clearly — no lightened
@@ -874,9 +942,9 @@ void main() {
              * sin((x - uHover.x) * 30.0 - t * 7.0) * uHoverAmt * 0.04;
   float qy = q.y - aOff - aHov;
   addStrand(colNum, wDen, covMax, covSum, qy, x, t, env, amp, 0.0, 13.0, 1.00, c0, 1.00);
-  addStrand(colNum, wDen, covMax, covSum, qy, x, t, env, amp, 1.3, 15.5, 1.22, c0, 0.55);
+  addStrand(colNum, wDen, covMax, covSum, qy, x, t, env, amp, 1.3, 15.5, 1.22, c3, 0.55);
   addStrand(colNum, wDen, covMax, covSum, qy, x, t, env, amp, 2.6, 12.0, 0.92, c1, 0.90);
-  addStrand(colNum, wDen, covMax, covSum, qy, x, t, env, amp, 3.9, 16.5, 1.12, c1, 0.50);
+  addStrand(colNum, wDen, covMax, covSum, qy, x, t, env, amp, 3.9, 16.5, 1.12, c4, 0.50);
   addStrand(colNum, wDen, covMax, covSum, qy, x, t, env, amp, 5.2, 14.0, 1.05, c2, 0.85);
   addStrand(colNum, wDen, covMax, covSum, qy, x, t, env, amp, 0.7, 17.0, 1.30, c2, 0.62);
 
