@@ -17,7 +17,7 @@ For the full specification (parameter API, state model, animation catalog, and n
 - **Aura**: overlapping colour strands that flow and stretch, blurred by depth for a layered, 3D look.
 - **Wave**: a single waveform line that fades out at each edge, flatlining when idle and peaking (with natural pauses) when speaking.
 
-Every visualizer is driven from the outside by the same props: a conversational **state** (ready, connecting, listening, thinking, speaking, plus a monochrome stalled **error** treatment), a palette of up to five full-HSV **colors**, an **expressivity** multiplier (0-2) for how lively the motion is, a **dark** theme flag, and live **tap / hover / mic / drag** inputs. Size belongs to the host: the components fill their parent and stay centred at any size.
+Every visualizer is driven from the outside by the same props: a conversational **state** (ready, connecting, listening, thinking, speaking), a palette of up to five full-HSV **colors**, an **expressivity** multiplier (0-2) for how lively the motion is, a **dark** theme flag, and live **tap / hover / mic / drag** inputs. Size belongs to the host: the components fill their parent and stay centred at any size.
 
 ## Embedding the engine
 
